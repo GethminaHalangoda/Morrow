@@ -1,13 +1,6 @@
 /**
  * MORROW — Firebase Authentication & Cloud Firestore Integration
- * 
- * Replace the configuration object below with your Firebase project credentials.
- * Setup Guide:
- * 1. Go to https://console.firebase.google.com/
- * 2. Create a project named "MORROW"
- * 3. Add a Web App (</>) and copy your credentials.
- * 4. Enable Authentication -> Sign-in Method -> Google.
- * 5. Enable Firestore Database in production mode.
+ * Collection: 'users' (Keyed by Google account UID)
  */
 
 const firebaseConfig = {
@@ -25,31 +18,88 @@ let db = null;
 let isFirebaseInitialized = false;
 
 try {
-  if (firebaseConfig.apiKey !== "YOUR_API_KEY_HERE") {
-    firebase.initializeApp(firebaseConfig);
+  if (firebaseConfig.apiKey) {
+    // Prevent duplicate app initialization
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
     auth = firebase.auth();
     db = firebase.firestore();
-    
-    // Enable offline persistence
-    db.enablePersistence().catch(err => {
+
+    // Enable multi-tab offline cache safely
+    db.enablePersistence({ synchronizeTabs: true }).catch(err => {
       console.warn("Firestore persistence notice:", err.code);
     });
 
-    // Keep users signed in until explicit logout
+    // Keep users signed in locally across browser reopens
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     isFirebaseInitialized = true;
-    console.log("MORROW: Firebase initialized successfully.");
-  } else {
-    console.warn("MORROW: Firebase running in Local Storage fallback mode until credentials are inserted.");
+    console.log("MORROW: Firebase initialized with 'users' collection.");
   }
 } catch (e) {
-  console.error("Firebase init error:", e);
+  console.error("Firebase initialization error:", e);
 }
 
-// Google Authentication
+// ---------------------------------------------------------------------------
+// AUTH STATE OBSERVER (Safe profile bootstrap — Never overwrites existing data)
+// ---------------------------------------------------------------------------
+if (auth) {
+  auth.onAuthStateChanged(async (user) => {
+    if (user && db) {
+      const userId = user.uid;
+      const userRef = db.collection("users").doc(userId);
+
+      try {
+        const docSnap = await userRef.get();
+
+        if (!docSnap.exists) {
+          // Brand New User: create new document using Google account info
+          await userRef.set({
+            uid: userId,
+            email: user.email || "",
+            displayName: user.displayName || "Scholar",
+            avatar: user.photoURL || null,
+            bio: "Focusing deeply.",
+            dailyPoints: 0,
+            weeklyPoints: 0,
+            allTimePoints: 0,
+            weeklyHours: 0,
+            todaySeconds: 0,
+            totalSeconds: 0,
+            streak: 0,
+            weekDaysDone: [],
+            lastStudyDate: null,
+            presence: "online",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            lastActive: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          console.log(`[MORROW] Created new user document in 'users/${userId}'`);
+        } else {
+          // Existing User: DO NOT touch points, streak, or stats! Only bump lastActive
+          await userRef.set({
+            email: user.email || "",
+            lastActive: firebase.firestore.FieldValue.serverTimestamp(),
+            presence: "online"
+          }, { merge: true });
+          console.log(`[MORROW] Existing profile verified for 'users/${userId}' (No data overwritten).`);
+        }
+      } catch (err) {
+        console.error("Error setting up user document in Firestore:", err);
+      }
+    } else {
+      console.log("[MORROW] User signed out.");
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GLOBAL METHODS EXPOSED FOR APP.JS
+// ---------------------------------------------------------------------------
+
+// 1. Google Authentication Popup
 window.signInWithGoogle = async function() {
   if (!isFirebaseInitialized) {
-    alert("Please insert your Firebase credentials inside 'firebase-config.js' to enable cloud Google sign-in.");
+    alert("Firebase is not initialized. Please verify your credentials.");
     return null;
   }
   const provider = new firebase.auth.GoogleAuthProvider();
@@ -57,23 +107,75 @@ window.signInWithGoogle = async function() {
     const result = await auth.signInWithPopup(provider);
     return result.user;
   } catch (err) {
-    console.error("Sign-in failure:", err);
+    console.error("Google sign-in error:", err);
     throw err;
   }
 };
 
+// 2. Sign Out
 window.signOutUser = async function() {
   if (isFirebaseInitialized && auth) {
+    if (auth.currentUser) {
+      await window.updateCloudPresence("offline");
+    }
     await auth.signOut();
   }
 };
 
-// Global Presence updater
-window.updateCloudPresence = async function(userId, status) {
-  if (!isFirebaseInitialized || !db || !userId) return;
+// 3. Save / Sync Study Session (Uses atomic increment and merge: true)
+window.recordStudySession = async function(sessionMinutes, earnedPoints) {
+  if (!isFirebaseInitialized || !db || !auth.currentUser) {
+    console.warn("Cannot record session: No authenticated user.");
+    return;
+  }
+
+  const userId = auth.currentUser.uid;
+  const userRef = db.collection("users").doc(userId);
+  const hoursToAdd = sessionMinutes / 60;
+
+  try {
+    await userRef.set({
+      dailyPoints: firebase.firestore.FieldValue.increment(earnedPoints),
+      weeklyPoints: firebase.firestore.FieldValue.increment(earnedPoints),
+      allTimePoints: firebase.firestore.FieldValue.increment(earnedPoints),
+      weeklyHours: firebase.firestore.FieldValue.increment(hoursToAdd),
+      todaySeconds: firebase.firestore.FieldValue.increment(sessionMinutes * 60),
+      totalSeconds: firebase.firestore.FieldValue.increment(sessionMinutes * 60),
+      lastActive: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    console.log(`[MORROW] Added +${sessionMinutes}m and +${earnedPoints}pts to 'users/${userId}'`);
+  } catch (err) {
+    console.error("Error updating study session:", err);
+  }
+};
+
+// 4. Update Profile Details (Without overwriting stats)
+window.updateUserProfile = async function(profileData) {
+  if (!isFirebaseInitialized || !db || !auth.currentUser) return;
+  const userId = auth.currentUser.uid;
+
   try {
     await db.collection("users").doc(userId).set({
-      presenceStatus: status, // 'studying' (green), 'online' (orange), 'offline' (red)
+      displayName: profileData.displayName || "Scholar",
+      avatar: profileData.avatar || null,
+      bio: profileData.bio || "",
+      lastActive: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    console.log("[MORROW] User profile successfully merged.");
+  } catch (err) {
+    console.error("Error updating user profile:", err);
+  }
+};
+
+// 5. Update Presence (online / studying / offline)
+window.updateCloudPresence = async function(status) {
+  if (!isFirebaseInitialized || !db || !auth.currentUser) return;
+  const userId = auth.currentUser.uid;
+
+  try {
+    await db.collection("users").doc(userId).set({
+      presence: status,
       lastSeen: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   } catch (err) {
