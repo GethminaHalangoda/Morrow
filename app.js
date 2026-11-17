@@ -1,7 +1,8 @@
 /**
  * MORROW — Deep Focus Engine
- * Uses Firestore 'users' collection exclusively.
- * Maps authenticated user to users/{user.uid} without overwriting existing data.
+ * Cloud-first Firestore hydration (prevents 0-point overwrites),
+ * Universal field mapping (points, weeklyPoints, totalStudyTime),
+ * Background timer, real-time sync, and Classore leaderboard.
  */
 
 (() => {
@@ -13,13 +14,13 @@
   // -------------------------------------------------------------
   // 1. STATE & STORAGE
   // -------------------------------------------------------------
-  const STORAGE_KEY = "MORROW_STATE_V6";
+  const STORAGE_KEY = "MORROW_STATE_V7";
 
   const defaultState = {
     user: {
       uid: null,
       displayName: "Scholar",
-      avatar: null, // Minimalist initials fallback, no cartoon placeholders
+      avatar: null,
       bio: "Focusing deeply.",
       presence: "online"
     },
@@ -51,6 +52,7 @@
 
   let state = loadLocalState();
   let sessionTasks = JSON.parse(sessionStorage.getItem("MORROW_SESSION_TASKS") || "[]");
+  let isCloudHydrated = false; // Prevents overwriting cloud data on fresh devices
 
   let pendingSession = {
     seconds: 0,
@@ -69,7 +71,9 @@
 
   function saveLocalState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    syncWithFirestore();
+    if (isCloudHydrated) {
+      syncWithFirestore();
+    }
   }
 
   function saveSessionTasks() {
@@ -77,7 +81,7 @@
   }
 
   // -------------------------------------------------------------
-  // 2. ACCURATE CALENDAR STREAK ENGINE
+  // 2. CALENDAR STREAK LOGIC
   // -------------------------------------------------------------
   function getTodayString() {
     return new Date().toISOString().split("T")[0];
@@ -94,7 +98,6 @@
     const yesterday = getYesterdayString();
 
     if (state.stats.lastRecordedDate !== today) {
-      // Streak breaks only if user failed to study yesterday and hasn't studied today
       if (state.streak.lastStudyDate && state.streak.lastStudyDate !== yesterday && state.streak.lastStudyDate !== today) {
         state.streak.count = 0;
       }
@@ -103,7 +106,6 @@
       state.stats.dailyPoints = 0;
       state.stats.lastRecordedDate = today;
 
-      // Reset week counters on Monday
       if (new Date().getDay() === 1) {
         state.stats.weekSeconds = 0;
         state.stats.weeklyPoints = 0;
@@ -142,6 +144,7 @@
     $("#streakHeadTitle").textContent = `${c} day streak`;
 
     const container = $("#weekDaysContainer");
+    if (!container) return;
     container.innerHTML = "";
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const currentDayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
@@ -162,9 +165,9 @@
   }
 
   // -------------------------------------------------------------
-  // 3. BACKGROUND & LOCK SCREEN ACCURATE TIMER
+  // 3. BACKGROUND & LOCK-SCREEN ACCURATE TIMER
   // -------------------------------------------------------------
-  let timerMode = "stopwatch"; // Stopwatch is default
+  let timerMode = "stopwatch";
   let timerRunning = false;
   let stopwatchSecs = 0;
   let pomoRemaining = 25 * 60;
@@ -174,7 +177,6 @@
   let sessionBaseSeconds = 0;
   let wakeLock = null;
 
-  // Background Web Worker avoids mobile browser background throttling
   let timerWorker = null;
   try {
     const workerBlob = new Blob([`
@@ -214,11 +216,12 @@
 
   const ringProgress = $("#ringProgress");
   const C = 2 * Math.PI * 100;
-  ringProgress.style.strokeDasharray = C.toFixed(2);
+  if (ringProgress) ringProgress.style.strokeDasharray = C.toFixed(2);
 
   function setSubjectLock(locked) {
     const bar = $("#subjectsBar");
     const hint = $("#subjectLockHint");
+    if (!bar || !hint) return;
     if (locked) {
       bar.classList.add("timer-locked");
       hint.classList.add("visible");
@@ -247,7 +250,6 @@
       if (timerRunning) {
         pauseTimer();
       } else {
-        // Enforce Google Sign-In prompt
         if (!state.user.uid) {
           showModal(
             "Sign in to start focusing",
@@ -328,7 +330,6 @@
     updateTimerDisplay();
   }
 
-  // Delta calculation guarantees precision even after lock-screen wake
   function onTimerTick() {
     const elapsed = Math.floor((Date.now() - sessionStartTimestamp) / 1000);
 
@@ -367,6 +368,7 @@
     const rem = s % 60;
     $("#timeDigits").textContent = `${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
 
+    if (!ringProgress) return;
     if (timerMode === "stopwatch") {
       const f = (stopwatchSecs % 3600) / 3600;
       ringProgress.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
@@ -447,6 +449,11 @@
     state.stats.weeklyPoints += earnedPoints;
     state.stats.allTimePoints += earnedPoints;
 
+    // Use atomic increment helper
+    if (window.recordStudySession) {
+      window.recordStudySession(minutes, earnedPoints);
+    }
+
     saveLocalState();
     resetTimer();
 
@@ -494,10 +501,11 @@
   // 5. AUDIO WAVE VISUALIZER
   // -------------------------------------------------------------
   const waveCanvas = $("#waveCanvas");
-  const waveCtx = waveCanvas.getContext("2d");
+  const waveCtx = waveCanvas ? waveCanvas.getContext("2d") : null;
   let waveStep = 0;
 
   function renderWave() {
+    if (!waveCtx) return;
     waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
     const W = waveCanvas.width;
     const H = waveCanvas.height;
@@ -541,6 +549,7 @@
     const bar = $("#subjectsBar");
     const taskSelect = $("#taskSubSelect");
     const filterPills = $("#subjectFilterPills");
+    if (!bar || !taskSelect || !filterPills) return;
     bar.innerHTML = "";
     taskSelect.innerHTML = "";
 
@@ -574,7 +583,6 @@
       taskSelect.appendChild(opt);
     });
 
-    // Rebuild leaderboard filter pills with "All Subjects" click listener
     filterPills.innerHTML = "";
     const allPill = document.createElement("span");
     allPill.className = `sub-filter-item ${currentSubjectFilter === "all" ? "active" : ""}`;
@@ -607,6 +615,7 @@
 
   function renderPrefSubjectList() {
     const prefList = $("#prefSubjectList");
+    if (!prefList) return;
     prefList.innerHTML = "";
 
     state.subjects.forEach(s => {
@@ -656,6 +665,7 @@
   function renderTasks() {
     const list = $("#taskList");
     const empty = $("#taskEmpty");
+    if (!list || !empty) return;
     list.innerHTML = "";
     empty.hidden = sessionTasks.length > 0;
 
@@ -712,7 +722,7 @@
   window.addEventListener("pagehide", clearCompletedTasks);
 
   // -------------------------------------------------------------
-  // 8. PROGRESS TAB & EXACT ANIMATED BAR GRAPH
+  // 8. PROGRESS TAB & RESTORED COLUMN WELLS
   // -------------------------------------------------------------
   function renderProgressTab() {
     const todayHrs = state.stats.todaySeconds / 3600;
@@ -735,8 +745,6 @@
   function renderRestoredBarGraph() {
     const container = $("#weeklyBarsContainer");
     if (!container) return;
-
-    // Reset container HTML to trigger CSS keyframe animation smoothly
     container.innerHTML = "";
 
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -765,7 +773,7 @@
   }
 
   // -------------------------------------------------------------
-  // 9. CLASSORE LEADERBOARD
+  // 9. CLASSORE LEADERBOARD (Universal Field Mapper)
   // -------------------------------------------------------------
   let currentLeague = "weekly";
   let cachedLeaderboardUsers = [];
@@ -782,6 +790,7 @@
   }
 
   function renderAvatar(container, user, size = "40px") {
+    if (!container) return;
     container.innerHTML = "";
     if (user.avatar) {
       const img = document.createElement("img");
@@ -802,11 +811,22 @@
     }
   }
 
+  // Maps all potential Firestore schema variations (points, weeklyPoints, allTimePoints)
+  function extractUserPoints(user, league) {
+    if (league === "daily") {
+      return user.dailyPoints ?? user.points ?? 0;
+    } else if (league === "alltime") {
+      return user.allTimePoints ?? user.points ?? user.weeklyPoints ?? 0;
+    } else {
+      // Weekly (default)
+      return user.weeklyPoints ?? user.points ?? user.allTimePoints ?? 0;
+    }
+  }
+
   function renderClassoreLeaderboard() {
     const listEl = $("#classoreLeaderboardRows");
+    if (!listEl) return;
     listEl.innerHTML = "";
-
-    const pointField = currentLeague === "daily" ? "dailyPoints" : (currentLeague === "alltime" ? "allTimePoints" : "weeklyPoints");
 
     let fullList = [...cachedLeaderboardUsers];
     const meExists = fullList.some(u => u.uid === state.user.uid);
@@ -816,6 +836,7 @@
         displayName: state.user.displayName,
         avatar: state.user.avatar,
         bio: state.user.bio || "Local Scholar",
+        points: state.stats.weeklyPoints,
         dailyPoints: state.stats.dailyPoints,
         weeklyPoints: state.stats.weeklyPoints,
         allTimePoints: state.stats.allTimePoints,
@@ -828,7 +849,8 @@
       fullList = fullList.filter(u => u.activeSubject === currentSubjectFilter || true);
     }
 
-    fullList.sort((a, b) => (b[pointField] || 0) - (a[pointField] || 0));
+    // Client-side sort prevents documents with different point key names from being dropped
+    fullList.sort((a, b) => extractUserPoints(b, currentLeague) - extractUserPoints(a, currentLeague));
 
     let myRank = -1;
     let pointsBehind = 0;
@@ -837,12 +859,13 @@
     fullList.forEach((user, idx) => {
       const rank = idx + 1;
       const isMe = user.uid === (state.user.uid || "local_me");
+      const userPts = extractUserPoints(user, currentLeague);
 
       if (isMe) {
         myRank = rank;
         if (idx > 0) {
           const aboveUser = fullList[idx - 1];
-          pointsBehind = (aboveUser[pointField] || 0) - (user[pointField] || 0);
+          pointsBehind = extractUserPoints(aboveUser, currentLeague) - userPts;
           personAboveName = aboveUser.displayName || `#${rank - 1}`;
         }
       }
@@ -864,7 +887,7 @@
             <div class="user-sub-location">${user.bio || "Scholar"}</div>
           </div>
         </div>
-        <div class="points-pill">• ${(user[pointField] || 0)} Pts</div>
+        <div class="points-pill">• ${userPts} Pts</div>
       `;
 
       listEl.appendChild(row);
@@ -877,21 +900,23 @@
 
     $("#classoreTileRank").textContent = myRank > 0 ? `#${myRank}` : "--";
     $("#classoreTileStreak").textContent = state.streak.count;
-    $("#classoreTilePoints").textContent = state.stats[pointField] || 0;
+    $("#classoreTilePoints").textContent = extractUserPoints(state.user, currentLeague) || state.stats.weeklyPoints;
     $("#classoreTileTime").textContent = `${(state.stats.weekSeconds / 3600).toFixed(1)}h`;
 
     const banner = $("#classoreRelativeBanner");
-    if (myRank === 1) {
-      banner.textContent = "🏆 You are currently #1 on the leaderboard!";
-    } else if (myRank > 1) {
-      banner.textContent = `You are #${myRank} — ${pointsBehind} pts behind ${personAboveName}`;
-    } else {
-      banner.textContent = "Complete a focus session to establish your standing.";
+    if (banner) {
+      if (myRank === 1) {
+        banner.textContent = "🏆 You are currently #1 on the leaderboard!";
+      } else if (myRank > 1) {
+        banner.textContent = `You are #${myRank} — ${pointsBehind} pts behind ${personAboveName}`;
+      } else {
+        banner.textContent = "Complete a focus session to establish your standing.";
+      }
     }
   }
 
   // -------------------------------------------------------------
-  // 10. FIRESTORE REAL-TIME BIDIRECTIONAL SYNC (Users Collection)
+  // 10. CLOUD-FIRST FIRESTORE HYDRATION & SYNC (Users Collection)
   // -------------------------------------------------------------
   function setPresence(status) {
     state.user.presence = status;
@@ -902,10 +927,9 @@
   }
 
   async function syncWithFirestore() {
-    if (!window.firebase || !firebase.apps.length || !state.user.uid) return;
+    if (!window.firebase || !firebase.apps.length || !state.user.uid || !isCloudHydrated) return;
     try {
       const db = firebase.firestore();
-      // Uses collection 'users' with user.uid and { merge: true }
       await db.collection("users").doc(state.user.uid).set({
         displayName: state.user.displayName,
         avatar: state.user.avatar,
@@ -913,9 +937,11 @@
         weeklyHours: state.stats.weekSeconds / 3600,
         todaySeconds: state.stats.todaySeconds,
         totalSeconds: state.stats.totalSeconds,
+        points: state.stats.weeklyPoints,
         dailyPoints: state.stats.dailyPoints,
         weeklyPoints: state.stats.weeklyPoints,
         allTimePoints: state.stats.allTimePoints,
+        totalStudyTime: Math.round(state.stats.totalSeconds / 60),
         streak: state.streak.count,
         weekDaysDone: state.streak.weekDaysDone,
         lastStudyDate: state.streak.lastStudyDate,
@@ -928,65 +954,130 @@
     }
   }
 
-  // Non-destructive listener: pulls latest stats without wiping local data
-  function initUserCloudSync(uid) {
+  // STEP 1: Download from Cloud FIRST on new device before saving
+  async function hydrateUserFromCloud(uid) {
     if (!window.firebase || !firebase.apps.length || !uid) return;
     const db = firebase.firestore();
 
+    try {
+      const docSnap = await db.collection("users").doc(uid).get();
+
+      if (docSnap.exists) {
+        const cloud = docSnap.data();
+
+        // Harmonize field variations (points, weeklyPoints, totalStudyTime)
+        const cloudWeeklyPts = cloud.weeklyPoints ?? cloud.points ?? 0;
+        const cloudDailyPts = cloud.dailyPoints ?? cloud.points ?? 0;
+        const cloudAllTimePts = cloud.allTimePoints ?? cloud.points ?? 0;
+        const cloudTotalSecs = cloud.totalSeconds ?? ((cloud.totalStudyTime || 0) * 60) ?? 0;
+        const cloudWeekSecs = Math.round((cloud.weeklyHours || 0) * 3600) || cloudTotalSecs;
+
+        // Take higher values so unsaved offline focus isn't lost either
+        state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, cloudWeeklyPts);
+        state.stats.dailyPoints = Math.max(state.stats.dailyPoints, cloudDailyPts);
+        state.stats.allTimePoints = Math.max(state.stats.allTimePoints, cloudAllTimePts);
+        state.stats.weekSeconds = Math.max(state.stats.weekSeconds, cloudWeekSecs);
+        state.stats.totalSeconds = Math.max(state.stats.totalSeconds, cloudTotalSecs);
+
+        if (cloud.streak !== undefined) {
+          state.streak.count = Math.max(state.streak.count, cloud.streak);
+        }
+        if (cloud.weekDaysDone && Array.isArray(cloud.weekDaysDone)) {
+          state.streak.weekDaysDone = Array.from(new Set([...state.streak.weekDaysDone, ...cloud.weekDaysDone]));
+        }
+        if (cloud.lastStudyDate) state.streak.lastStudyDate = cloud.lastStudyDate;
+        if (cloud.displayName) state.user.displayName = cloud.displayName;
+        if (cloud.avatar) state.user.avatar = cloud.avatar;
+        if (cloud.bio) state.user.bio = cloud.bio;
+        if (cloud.subjects && cloud.subjects.length) state.subjects = cloud.subjects;
+
+        console.log(`[MORROW] Hydrated user state from cloud: ${state.stats.weeklyPoints} pts, ${state.streak.count} day streak.`);
+      }
+
+      isCloudHydrated = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+      renderStreakWeek();
+      renderProgressTab();
+      renderClassoreLeaderboard();
+      renderUserProfile();
+      renderSubjectsBar();
+
+      // Listen for future changes across devices
+      initUserLiveListener(uid);
+    } catch (err) {
+      console.error("Cloud hydration error:", err);
+      isCloudHydrated = true; // Fallback to avoid deadlocking writes
+    }
+  }
+
+  // STEP 2: Live cross-device listener
+  function initUserLiveListener(uid) {
+    const db = firebase.firestore();
     db.collection("users").doc(uid).onSnapshot(doc => {
       if (doc.exists) {
         const remote = doc.data();
 
-        // Safeguard: preserves existing higher values across devices
-        state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, remote.weeklyPoints || 0);
-        state.stats.dailyPoints = Math.max(state.stats.dailyPoints, remote.dailyPoints || 0);
-        state.stats.allTimePoints = Math.max(state.stats.allTimePoints, remote.allTimePoints || 0);
-        state.stats.weekSeconds = Math.max(state.stats.weekSeconds, Math.round((remote.weeklyHours || 0) * 3600));
-        state.stats.totalSeconds = Math.max(state.stats.totalSeconds, remote.totalSeconds || 0);
+        const remoteWeekly = remote.weeklyPoints ?? remote.points ?? 0;
+        const remoteDaily = remote.dailyPoints ?? 0;
+        const remoteAllTime = remote.allTimePoints ?? remote.points ?? 0;
+        const remoteTotalSec = remote.totalSeconds ?? ((remote.totalStudyTime || 0) * 60) ?? 0;
+        const remoteWeekSec = Math.round((remote.weeklyHours || 0) * 3600) || remoteTotalSec;
 
-        if (remote.streak !== undefined) {
-          state.streak.count = Math.max(state.streak.count, remote.streak);
-        }
-        if (remote.weekDaysDone) {
-          state.streak.weekDaysDone = Array.from(new Set([...state.streak.weekDaysDone, ...remote.weekDaysDone]));
-        }
+        state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, remoteWeekly);
+        state.stats.dailyPoints = Math.max(state.stats.dailyPoints, remoteDaily);
+        state.stats.allTimePoints = Math.max(state.stats.allTimePoints, remoteAllTime);
+        state.stats.weekSeconds = Math.max(state.stats.weekSeconds, remoteWeekSec);
+        state.stats.totalSeconds = Math.max(state.stats.totalSeconds, remoteTotalSec);
+
+        if (remote.streak !== undefined) state.streak.count = Math.max(state.streak.count, remote.streak);
         if (remote.displayName) state.user.displayName = remote.displayName;
         if (remote.avatar) state.user.avatar = remote.avatar;
         if (remote.bio) state.user.bio = remote.bio;
-        if (remote.subjects && remote.subjects.length) state.subjects = remote.subjects;
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         renderStreakWeek();
         renderProgressTab();
         renderClassoreLeaderboard();
         renderUserProfile();
-        renderSubjectsBar();
       }
     });
   }
 
+  // Live leaderboard listener for all users
   function initFirestoreRealtimeLeaderboard() {
     if (!window.firebase || !firebase.apps.length) {
       renderClassoreLeaderboard();
       return;
     }
     const db = firebase.firestore();
-    db.collection("users")
-      .orderBy("weeklyPoints", "desc")
-      .limit(50)
-      .onSnapshot(snap => {
-        cachedLeaderboardUsers = [];
-        snap.forEach(doc => {
-          cachedLeaderboardUsers.push({ uid: doc.id, ...doc.data() });
+
+    // Query collection without composite order-by so documents with different point field names are never omitted
+    db.collection("users").limit(50).onSnapshot(snap => {
+      cachedLeaderboardUsers = [];
+      snap.forEach(doc => {
+        const data = doc.data();
+        cachedLeaderboardUsers.push({
+          uid: doc.id,
+          displayName: data.displayName || "Scholar",
+          avatar: data.avatar || null,
+          bio: data.bio || "Scholar",
+          points: data.points ?? data.weeklyPoints ?? 0,
+          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
+          dailyPoints: data.dailyPoints ?? data.points ?? 0,
+          allTimePoints: data.allTimePoints ?? data.points ?? 0,
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
+          streak: data.streak || 0
         });
-        renderClassoreLeaderboard();
-      }, err => console.warn(err));
+      });
+      renderClassoreLeaderboard();
+    }, err => console.warn(err));
   }
 
   function triggerGoogleSignIn() {
     if (window.signInWithGoogle) {
       window.signInWithGoogle().catch(() => {
-        showModal("Sign-In Notice", "Sign in popup was dismissed. Please check your credentials.", [
+        showModal("Sign-In Notice", "Sign-in popup was dismissed. Please check your credentials.", [
           { label: "Close", action: closeModal }
         ]);
       });
@@ -996,21 +1087,25 @@
   function initAuth() {
     if (!window.firebase || !firebase.apps.length) return;
 
-    firebase.auth().onAuthStateChanged(user => {
+    firebase.auth().onAuthStateChanged(async user => {
       if (user) {
         state.user.uid = user.uid;
         state.user.displayName = user.displayName || state.user.displayName;
         if (!state.user.avatar && user.photoURL) {
           state.user.avatar = user.photoURL;
         }
+
         $("#btnGoogleLogin").style.display = "none";
         $("#btnSignOut").style.display = "inline-flex";
+
         renderUserProfile();
-        initUserCloudSync(user.uid);
         initFirestoreRealtimeLeaderboard();
-        syncWithFirestore();
+
+        // Hydrate from cloud FIRST before executing any writes
+        await hydrateUserFromCloud(user.uid);
       } else {
         state.user.uid = null;
+        isCloudHydrated = false;
         $("#btnGoogleLogin").style.display = "inline-flex";
         $("#btnSignOut").style.display = "none";
       }
