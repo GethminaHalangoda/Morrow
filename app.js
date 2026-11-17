@@ -1,8 +1,7 @@
 /**
  * MORROW — Deep Focus Engine
- * Cloud-first Firestore hydration (prevents 0-point overwrites),
- * Universal field mapping (points, weeklyPoints, totalStudyTime),
- * Background timer, real-time sync, and Classore leaderboard.
+ * Includes: Telegram-style Verified Badges, Super Admin Privileges for gethminahalangoda@gmail.com,
+ * Real-time & Manual Refresh Leaderboard, Firestore 'users' Sync, and Lock-Screen Timer.
  */
 
 (() => {
@@ -12,6 +11,95 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   // -------------------------------------------------------------
+  // 0. ADMIN CONFIGURATION & SPECIAL PRIVILEGES
+  // -------------------------------------------------------------
+  const SUPER_ADMIN_EMAIL = "gethminahalangoda@gmail.com";
+
+  function isSuperAdmin(email) {
+    return !!email && email.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase();
+  }
+
+  function isUserPremium(user) {
+    if (!user) return false;
+    if (isSuperAdmin(user.email)) return true;
+    return user.isPremium === true;
+  }
+
+  // Telegram-style Verified Blue Badge SVG (8-scallop rosette with white checkmark)
+  function getVerifiedBadgeHtml(isPremium, title = "Verified Scholar") {
+    if (!isPremium) return "";
+    return `
+      <span class="tg-verified-badge" title="${title}">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+          <path d="M12 2L14.4 4.4L17.7 4.1L18.9 7.2L22 8.4L21.6 11.8L23.7 14.3L21.6 16.9L22 20.3L18.9 21.5L17.7 24.6L14.4 24.3L12 26.7L9.6 24.3L6.3 24.6L5.1 21.5L2 20.3L2.4 16.9L0.3 14.3L2.4 11.8L2 8.4L5.1 7.2L6.3 4.1L9.6 4.4L12 2Z" transform="scale(0.82) translate(2.5, 0.5)" fill="#24A1DE"/>
+          <path d="M8.5 12.5L11 15L16.5 9.5" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+    `;
+  }
+
+  // Inject styles dynamically so you don't have to touch index.html or css
+  function injectDynamicStyles() {
+    if ($("#morrow-dynamic-styles")) return;
+    const style = document.createElement("style");
+    style.id = "morrow-dynamic-styles";
+    style.textContent = `
+      .tg-verified-badge {
+        display: inline-flex;
+        align-items: center;
+        vertical-align: middle;
+        margin-left: 5px;
+        flex-shrink: 0;
+      }
+      .tg-verified-badge svg {
+        filter: drop-shadow(0 0 5px rgba(36, 161, 222, 0.45));
+        transition: transform 0.2s ease;
+      }
+      .tg-verified-badge:hover svg {
+        transform: scale(1.15);
+      }
+      .spin-clockwise {
+        animation: spinClockwise 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      @keyframes spinClockwise {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .refresh-lead-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        font-size: 0.82rem;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .refresh-lead-btn:hover {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+      }
+      .admin-premium-toggle {
+        border: 1px solid var(--line-strong);
+        background: var(--surface-raised);
+        color: var(--muted);
+        border-radius: 6px;
+        padding: 2px 7px;
+        font-size: 0.72rem;
+        cursor: pointer;
+        margin-left: 6px;
+        transition: all 0.2s ease;
+      }
+      .admin-premium-toggle.active {
+        background: rgba(36, 161, 222, 0.2);
+        color: #24A1DE;
+        border-color: #24A1DE;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // -------------------------------------------------------------
   // 1. STATE & STORAGE
   // -------------------------------------------------------------
   const STORAGE_KEY = "MORROW_STATE_V7";
@@ -19,10 +107,13 @@
   const defaultState = {
     user: {
       uid: null,
+      email: null,
       displayName: "Scholar",
       avatar: null,
       bio: "Focusing deeply.",
-      presence: "online"
+      presence: "online",
+      isPremium: false,
+      isAdmin: false
     },
     settings: {
       dailyGoalHours: 4.0,
@@ -52,7 +143,7 @@
 
   let state = loadLocalState();
   let sessionTasks = JSON.parse(sessionStorage.getItem("MORROW_SESSION_TASKS") || "[]");
-  let isCloudHydrated = false; // Prevents overwriting cloud data on fresh devices
+  let isCloudHydrated = false;
 
   let pendingSession = {
     seconds: 0,
@@ -81,7 +172,7 @@
   }
 
   // -------------------------------------------------------------
-  // 2. CALENDAR STREAK LOGIC
+  // 2. ACCURATE CALENDAR STREAK ENGINE
   // -------------------------------------------------------------
   function getTodayString() {
     return new Date().toISOString().split("T")[0];
@@ -139,9 +230,13 @@
 
   function renderStreakWeek() {
     const c = state.streak.count;
-    $("#sideStreakNum").textContent = c;
-    $("#topStreakText").textContent = `${c} day streak`;
-    $("#streakHeadTitle").textContent = `${c} day streak`;
+    const sideNum = $("#sideStreakNum");
+    const topText = $("#topStreakText");
+    const headTitle = $("#streakHeadTitle");
+
+    if (sideNum) sideNum.textContent = c;
+    if (topText) topText.textContent = `${c} day streak`;
+    if (headTitle) headTitle.textContent = `${c} day streak`;
 
     const container = $("#weekDaysContainer");
     if (!container) return;
@@ -165,7 +260,7 @@
   }
 
   // -------------------------------------------------------------
-  // 3. BACKGROUND & LOCK-SCREEN ACCURATE TIMER
+  // 3. BACKGROUND & LOCK SCREEN ACCURATE TIMER
   // -------------------------------------------------------------
   let timerMode = "stopwatch";
   let timerRunning = false;
@@ -279,8 +374,10 @@
       commitSessionVerification();
     });
 
-    $("#claimPointsActionBtn").addEventListener("click", commitSessionVerification);
-    $("#topClaimPointsBtn").addEventListener("click", commitSessionVerification);
+    const claimAction = $("#claimPointsActionBtn");
+    if (claimAction) claimAction.addEventListener("click", commitSessionVerification);
+    const topClaim = $("#topClaimPointsBtn");
+    if (topClaim) topClaim.addEventListener("click", commitSessionVerification);
 
     $("#topicInput").addEventListener("input", e => {
       $("#activeTopicTag").textContent = e.target.value.trim() || "No topic selected";
@@ -323,8 +420,10 @@
     stopwatchSecs = 0;
     pomoRemaining = 25 * 60;
     pendingSession.seconds = 0;
-    $("#pendingSessionCard").classList.remove("visible");
-    $("#topClaimPointsBtn").style.display = "none";
+    const pendingCard = $("#pendingSessionCard");
+    if (pendingCard) pendingCard.classList.remove("visible");
+    const topClaim = $("#topClaimPointsBtn");
+    if (topClaim) topClaim.style.display = "none";
     $("#startBtnLabel").textContent = "Start";
     $("#timerStatus").textContent = "Ready";
     updateTimerDisplay();
@@ -420,9 +519,12 @@
   function promptPendingPointsCard() {
     const mins = Math.max(1, Math.round(pendingSession.seconds / 60));
     const pts = calculateSessionPoints(mins, pendingSession.isCompletedPomo);
-    $("#pendingSessionDetails").textContent = `${mins}m focused (+${pts} pts) • Claim within 5m`;
-    $("#pendingSessionCard").classList.add("visible");
-    $("#topClaimPointsBtn").style.display = "inline-flex";
+    const details = $("#pendingSessionDetails");
+    if (details) details.textContent = `${mins}m focused (+${pts} pts) • Claim within 5m`;
+    const pendingCard = $("#pendingSessionCard");
+    if (pendingCard) pendingCard.classList.add("visible");
+    const topClaim = $("#topClaimPointsBtn");
+    if (topClaim) topClaim.style.display = "inline-flex";
     pendingSession.timestampEnd = Date.now();
   }
 
@@ -449,7 +551,6 @@
     state.stats.weeklyPoints += earnedPoints;
     state.stats.allTimePoints += earnedPoints;
 
-    // Use atomic increment helper
     if (window.recordStudySession) {
       window.recordStudySession(minutes, earnedPoints);
     }
@@ -494,7 +595,8 @@
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
-    $("#themeSwitch").setAttribute("aria-checked", String(theme === "dark"));
+    const sw = $("#themeSwitch");
+    if (sw) sw.setAttribute("aria-checked", String(theme === "dark"));
   }
 
   // -------------------------------------------------------------
@@ -643,21 +745,24 @@
     lucide.createIcons();
   }
 
-  $("#newSubjectForm").addEventListener("submit", e => {
-    e.preventDefault();
-    const name = $("#newSubName").value.trim();
-    const color = $("#newSubColor").value;
-    if (!name) return;
+  const newSubForm = $("#newSubjectForm");
+  if (newSubForm) {
+    newSubForm.addEventListener("submit", e => {
+      e.preventDefault();
+      const name = $("#newSubName").value.trim();
+      const color = $("#newSubColor").value;
+      if (!name) return;
 
-    state.subjects.push({
-      id: "sub_" + Date.now().toString(36),
-      name,
-      color
+      state.subjects.push({
+        id: "sub_" + Date.now().toString(36),
+        name,
+        color
+      });
+      saveLocalState();
+      $("#newSubName").value = "";
+      renderSubjectsBar();
     });
-    saveLocalState();
-    $("#newSubName").value = "";
-    renderSubjectsBar();
-  });
+  }
 
   // -------------------------------------------------------------
   // 7. STUDY TASKS
@@ -699,17 +804,20 @@
     lucide.createIcons();
   }
 
-  $("#taskForm").addEventListener("submit", e => {
-    e.preventDefault();
-    const text = $("#taskInput").value.trim();
-    const subjectId = $("#taskSubSelect").value;
-    if (!text) return;
+  const taskForm = $("#taskForm");
+  if (taskForm) {
+    taskForm.addEventListener("submit", e => {
+      e.preventDefault();
+      const text = $("#taskInput").value.trim();
+      const subjectId = $("#taskSubSelect").value;
+      if (!text) return;
 
-    sessionTasks.push({ id: Date.now(), text, subjectId, done: false });
-    saveSessionTasks();
-    $("#taskInput").value = "";
-    renderTasks();
-  });
+      sessionTasks.push({ id: Date.now(), text, subjectId, done: false });
+      saveSessionTasks();
+      $("#taskInput").value = "";
+      renderTasks();
+    });
+  }
 
   function clearCompletedTasks() {
     if (sessionTasks.some(t => t.done)) {
@@ -722,22 +830,31 @@
   window.addEventListener("pagehide", clearCompletedTasks);
 
   // -------------------------------------------------------------
-  // 8. PROGRESS TAB & RESTORED COLUMN WELLS
+  // 8. PROGRESS TAB & EXACT ANIMATED BAR GRAPH
   // -------------------------------------------------------------
   function renderProgressTab() {
     const todayHrs = state.stats.todaySeconds / 3600;
     const weekHrs = state.stats.weekSeconds / 3600;
     const goal = state.settings.dailyGoalHours;
 
-    $("#statToday").textContent = `${Math.floor(todayHrs)}h ${Math.round((todayHrs % 1) * 60)}m`;
-    $("#statWeek").textContent = `${Math.floor(weekHrs)}h ${Math.round((weekHrs % 1) * 60)}m`;
-    $("#statTotalPts").textContent = `${state.stats.weeklyPoints} Pts`;
-    $("#chartTotalBadge").textContent = `${weekHrs.toFixed(1)}h total`;
+    const statToday = $("#statToday");
+    const statWeek = $("#statWeek");
+    const statPts = $("#statTotalPts");
+    const badge = $("#chartTotalBadge");
 
-    $("#goalTextRatio").textContent = `${todayHrs.toFixed(1)}h of ${goal.toFixed(1)}h`;
+    if (statToday) statToday.textContent = `${Math.floor(todayHrs)}h ${Math.round((todayHrs % 1) * 60)}m`;
+    if (statWeek) statWeek.textContent = `${Math.floor(weekHrs)}h ${Math.round((weekHrs % 1) * 60)}m`;
+    if (statPts) statPts.textContent = `${state.stats.weeklyPoints} Pts`;
+    if (badge) badge.textContent = `${weekHrs.toFixed(1)}h total`;
+
+    const goalRatio = $("#goalTextRatio");
+    const goalPct = $("#goalPercent");
+    const meterBar = $("#goalMeterBar");
+
+    if (goalRatio) goalRatio.textContent = `${todayHrs.toFixed(1)}h of ${goal.toFixed(1)}h`;
     const pct = Math.min(100, Math.round((todayHrs / goal) * 100));
-    $("#goalPercent").textContent = `${pct}%`;
-    $("#goalMeterBar").style.width = `${pct}%`;
+    if (goalPct) goalPct.textContent = `${pct}%`;
+    if (meterBar) meterBar.style.width = `${pct}%`;
 
     renderRestoredBarGraph();
   }
@@ -773,7 +890,7 @@
   }
 
   // -------------------------------------------------------------
-  // 9. CLASSORE LEADERBOARD (Universal Field Mapper)
+  // 9. CLASSORE LEADERBOARD, REFRESH BUTTON, & VERIFIED BADGES
   // -------------------------------------------------------------
   let currentLeague = "weekly";
   let cachedLeaderboardUsers = [];
@@ -787,6 +904,38 @@
         renderClassoreLeaderboard();
       });
     });
+
+    // Inject the Refresh Button into the Ranking tab if not present
+    let refreshBtn = $("#btnRefreshLeaderboard");
+    if (!refreshBtn) {
+      const filterBar = $(".classore-filter-bar");
+      if (filterBar) {
+        refreshBtn = document.createElement("button");
+        refreshBtn.id = "btnRefreshLeaderboard";
+        refreshBtn.type = "button";
+        refreshBtn.className = "btn ghost refresh-lead-btn";
+        refreshBtn.title = "Reload Leaderboard Data";
+        refreshBtn.innerHTML = `<i data-lucide="rotate-cw" style="width:14px;height:14px;"></i><span>Refresh</span>`;
+
+        const authContainer = $("#authContainer");
+        if (authContainer) {
+          filterBar.insertBefore(refreshBtn, authContainer);
+        } else {
+          filterBar.appendChild(refreshBtn);
+        }
+
+        refreshBtn.addEventListener("click", async () => {
+          const icon = refreshBtn.querySelector("i, svg");
+          if (icon) icon.classList.add("spin-clockwise");
+          await forceRefreshLeaderboard();
+          setTimeout(() => {
+            if (icon) icon.classList.remove("spin-clockwise");
+          }, 650);
+        });
+
+        lucide.createIcons();
+      }
+    }
   }
 
   function renderAvatar(container, user, size = "40px") {
@@ -811,17 +960,38 @@
     }
   }
 
-  // Maps all potential Firestore schema variations (points, weeklyPoints, allTimePoints)
   function extractUserPoints(user, league) {
     if (league === "daily") {
       return user.dailyPoints ?? user.points ?? 0;
     } else if (league === "alltime") {
       return user.allTimePoints ?? user.points ?? user.weeklyPoints ?? 0;
     } else {
-      // Weekly (default)
       return user.weeklyPoints ?? user.points ?? user.allTimePoints ?? 0;
     }
   }
+
+  // Admin capability: toggle verified status for users
+  window.toggleUserVerifiedStatus = async function(targetUid, newStatus) {
+    if (!state.user.isAdmin) {
+      alert("Only the super admin has access to grant verified status.");
+      return;
+    }
+    if (!window.firebase || !firebase.apps.length) return;
+    const db = firebase.firestore();
+
+    try {
+      await db.collection("users").doc(targetUid).set({
+        isPremium: newStatus
+      }, { merge: true });
+
+      const target = cachedLeaderboardUsers.find(u => u.uid === targetUid);
+      if (target) target.isPremium = newStatus;
+      renderClassoreLeaderboard();
+      console.log(`[MORROW ADMIN] Set verified status = ${newStatus} for user ${targetUid}`);
+    } catch (err) {
+      console.error("Error setting verified status:", err);
+    }
+  };
 
   function renderClassoreLeaderboard() {
     const listEl = $("#classoreLeaderboardRows");
@@ -833,6 +1003,7 @@
     if (!meExists) {
       fullList.push({
         uid: state.user.uid || "local_me",
+        email: state.user.email,
         displayName: state.user.displayName,
         avatar: state.user.avatar,
         bio: state.user.bio || "Local Scholar",
@@ -841,7 +1012,8 @@
         weeklyPoints: state.stats.weeklyPoints,
         allTimePoints: state.stats.allTimePoints,
         streak: state.streak.count,
-        weeklyHours: state.stats.weekSeconds / 3600
+        weeklyHours: state.stats.weekSeconds / 3600,
+        isPremium: isUserPremium(state.user)
       });
     }
 
@@ -849,7 +1021,6 @@
       fullList = fullList.filter(u => u.activeSubject === currentSubjectFilter || true);
     }
 
-    // Client-side sort prevents documents with different point key names from being dropped
     fullList.sort((a, b) => extractUserPoints(b, currentLeague) - extractUserPoints(a, currentLeague));
 
     let myRank = -1;
@@ -860,6 +1031,7 @@
       const rank = idx + 1;
       const isMe = user.uid === (state.user.uid || "local_me");
       const userPts = extractUserPoints(user, currentLeague);
+      const userIsVerified = isUserPremium(user);
 
       if (isMe) {
         myRank = rank;
@@ -878,12 +1050,28 @@
       else if (rank === 2) rankHtml = `<span class="badge-silver">★ 2</span>`;
       else if (rank === 3) rankHtml = `<span class="badge-bronze">★ 3</span>`;
 
+      // Admin toggle button (visible exclusively to gethminahalangoda@gmail.com)
+      let adminToggleHtml = "";
+      if (state.user.isAdmin && !isMe) {
+        adminToggleHtml = `
+          <button class="admin-premium-toggle ${userIsVerified ? 'active' : ''}" 
+                  onclick="event.stopPropagation(); window.toggleUserVerifiedStatus('${user.uid}', ${!userIsVerified})" 
+                  title="Super Admin: Toggle Verified Badge">
+            ${userIsVerified ? 'Revoke ★' : 'Grant ★'}
+          </button>
+        `;
+      }
+
       row.innerHTML = `
         <div class="row-user-info">
           <div class="rank-badge-wrap">${rankHtml}</div>
           <div class="user-row-avatar" id="classoreRowAv_${rank}"></div>
           <div style="min-width:0; flex:1;">
-            <div class="user-name-title">${user.displayName || "Scholar"} ${isMe ? "(You)" : ""}</div>
+            <div class="user-name-title">
+              <span>${user.displayName || "Scholar"} ${isMe ? "(You)" : ""}</span>
+              ${getVerifiedBadgeHtml(userIsVerified)}
+              ${adminToggleHtml}
+            </div>
             <div class="user-sub-location">${user.bio || "Scholar"}</div>
           </div>
         </div>
@@ -894,14 +1082,25 @@
       renderAvatar($(`#classoreRowAv_${rank}`), user, "38px");
     });
 
-    $("#classoreUserName").textContent = `${state.user.displayName} (You)`;
-    $("#classoreUserBio").textContent = state.user.bio || "Local Scholar";
+    const cardName = $("#classoreUserName");
+    const userIsVerified = isUserPremium(state.user);
+    if (cardName) {
+      cardName.innerHTML = `<span>${state.user.displayName} (You)</span> ${getVerifiedBadgeHtml(userIsVerified)}`;
+    }
+
+    const cardBio = $("#classoreUserBio");
+    if (cardBio) cardBio.textContent = state.user.bio || "Local Scholar";
     renderAvatar($("#classoreUserAvatar"), state.user, "70px");
 
-    $("#classoreTileRank").textContent = myRank > 0 ? `#${myRank}` : "--";
-    $("#classoreTileStreak").textContent = state.streak.count;
-    $("#classoreTilePoints").textContent = extractUserPoints(state.user, currentLeague) || state.stats.weeklyPoints;
-    $("#classoreTileTime").textContent = `${(state.stats.weekSeconds / 3600).toFixed(1)}h`;
+    const tRank = $("#classoreTileRank");
+    const tStreak = $("#classoreTileStreak");
+    const tPoints = $("#classoreTilePoints");
+    const tTime = $("#classoreTileTime");
+
+    if (tRank) tRank.textContent = myRank > 0 ? `#${myRank}` : "--";
+    if (tStreak) tStreak.textContent = state.streak.count;
+    if (tPoints) tPoints.textContent = extractUserPoints(state.user, currentLeague) || state.stats.weeklyPoints;
+    if (tTime) tTime.textContent = `${(state.stats.weekSeconds / 3600).toFixed(1)}h`;
 
     const banner = $("#classoreRelativeBanner");
     if (banner) {
@@ -915,12 +1114,68 @@
     }
   }
 
+  // Manual Leaderboard Data Refresh (bypasses local cache, pulls directly from server)
+  async function forceRefreshLeaderboard() {
+    if (!window.firebase || !firebase.apps.length) return;
+    const db = firebase.firestore();
+
+    try {
+      // Force read from server directly
+      const snap = await db.collection("users").limit(50).get({ source: "server" });
+      cachedLeaderboardUsers = [];
+      snap.forEach(doc => {
+        const data = doc.data();
+        const userEmail = data.email || "";
+        cachedLeaderboardUsers.push({
+          uid: doc.id,
+          email: userEmail,
+          displayName: data.displayName || "Scholar",
+          avatar: data.avatar || null,
+          bio: data.bio || "Scholar",
+          points: data.points ?? data.weeklyPoints ?? 0,
+          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
+          dailyPoints: data.dailyPoints ?? data.points ?? 0,
+          allTimePoints: data.allTimePoints ?? data.points ?? 0,
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
+          streak: data.streak || 0,
+          isPremium: isSuperAdmin(userEmail) || data.isPremium === true
+        });
+      });
+      renderClassoreLeaderboard();
+      console.log("[MORROW] Forced server refresh on leaderboard.");
+    } catch (err) {
+      // Offline fallback
+      const snap = await db.collection("users").limit(50).get();
+      cachedLeaderboardUsers = [];
+      snap.forEach(doc => {
+        const data = doc.data();
+        const userEmail = data.email || "";
+        cachedLeaderboardUsers.push({
+          uid: doc.id,
+          email: userEmail,
+          displayName: data.displayName || "Scholar",
+          avatar: data.avatar || null,
+          bio: data.bio || "Scholar",
+          points: data.points ?? data.weeklyPoints ?? 0,
+          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
+          dailyPoints: data.dailyPoints ?? data.points ?? 0,
+          allTimePoints: data.allTimePoints ?? data.points ?? 0,
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
+          streak: data.streak || 0,
+          isPremium: isSuperAdmin(userEmail) || data.isPremium === true
+        });
+      });
+      renderClassoreLeaderboard();
+    }
+  }
+
   // -------------------------------------------------------------
   // 10. CLOUD-FIRST FIRESTORE HYDRATION & SYNC (Users Collection)
   // -------------------------------------------------------------
   function setPresence(status) {
     state.user.presence = status;
-    $("#sidePresence").className = `presence-dot ${status}`;
+    const dot = $("#sidePresence");
+    if (dot) dot.className = `presence-dot ${status}`;
     if (window.updateCloudPresence) {
       window.updateCloudPresence(status);
     }
@@ -930,7 +1185,11 @@
     if (!window.firebase || !firebase.apps.length || !state.user.uid || !isCloudHydrated) return;
     try {
       const db = firebase.firestore();
+      const isOwner = isSuperAdmin(state.user.email);
+      const isPremiumUser = isOwner || state.user.isPremium;
+
       await db.collection("users").doc(state.user.uid).set({
+        email: state.user.email || "",
         displayName: state.user.displayName,
         avatar: state.user.avatar,
         bio: state.user.bio,
@@ -947,6 +1206,8 @@
         lastStudyDate: state.streak.lastStudyDate,
         subjects: state.subjects,
         presence: state.user.presence,
+        isPremium: isPremiumUser,
+        role: isOwner ? "admin" : "scholar",
         lastActive: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     } catch (e) {
@@ -954,7 +1215,7 @@
     }
   }
 
-  // STEP 1: Download from Cloud FIRST on new device before saving
+  // Download from Cloud FIRST on new device before saving
   async function hydrateUserFromCloud(uid) {
     if (!window.firebase || !firebase.apps.length || !uid) return;
     const db = firebase.firestore();
@@ -965,14 +1226,12 @@
       if (docSnap.exists) {
         const cloud = docSnap.data();
 
-        // Harmonize field variations (points, weeklyPoints, totalStudyTime)
         const cloudWeeklyPts = cloud.weeklyPoints ?? cloud.points ?? 0;
         const cloudDailyPts = cloud.dailyPoints ?? cloud.points ?? 0;
         const cloudAllTimePts = cloud.allTimePoints ?? cloud.points ?? 0;
         const cloudTotalSecs = cloud.totalSeconds ?? ((cloud.totalStudyTime || 0) * 60) ?? 0;
         const cloudWeekSecs = Math.round((cloud.weeklyHours || 0) * 3600) || cloudTotalSecs;
 
-        // Take higher values so unsaved offline focus isn't lost either
         state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, cloudWeeklyPts);
         state.stats.dailyPoints = Math.max(state.stats.dailyPoints, cloudDailyPts);
         state.stats.allTimePoints = Math.max(state.stats.allTimePoints, cloudAllTimePts);
@@ -991,6 +1250,11 @@
         if (cloud.bio) state.user.bio = cloud.bio;
         if (cloud.subjects && cloud.subjects.length) state.subjects = cloud.subjects;
 
+        // Verify premium status
+        if (cloud.isPremium || isSuperAdmin(state.user.email)) {
+          state.user.isPremium = true;
+        }
+
         console.log(`[MORROW] Hydrated user state from cloud: ${state.stats.weeklyPoints} pts, ${state.streak.count} day streak.`);
       }
 
@@ -1003,15 +1267,14 @@
       renderUserProfile();
       renderSubjectsBar();
 
-      // Listen for future changes across devices
       initUserLiveListener(uid);
     } catch (err) {
       console.error("Cloud hydration error:", err);
-      isCloudHydrated = true; // Fallback to avoid deadlocking writes
+      isCloudHydrated = true;
     }
   }
 
-  // STEP 2: Live cross-device listener
+  // Live real-time listener for current user across devices
   function initUserLiveListener(uid) {
     const db = firebase.firestore();
     db.collection("users").doc(uid).onSnapshot(doc => {
@@ -1034,6 +1297,7 @@
         if (remote.displayName) state.user.displayName = remote.displayName;
         if (remote.avatar) state.user.avatar = remote.avatar;
         if (remote.bio) state.user.bio = remote.bio;
+        if (remote.isPremium || isSuperAdmin(state.user.email)) state.user.isPremium = true;
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         renderStreakWeek();
@@ -1044,7 +1308,7 @@
     });
   }
 
-  // Live leaderboard listener for all users
+  // Real-time listener for the global leaderboard
   function initFirestoreRealtimeLeaderboard() {
     if (!window.firebase || !firebase.apps.length) {
       renderClassoreLeaderboard();
@@ -1052,13 +1316,14 @@
     }
     const db = firebase.firestore();
 
-    // Query collection without composite order-by so documents with different point field names are never omitted
     db.collection("users").limit(50).onSnapshot(snap => {
       cachedLeaderboardUsers = [];
       snap.forEach(doc => {
         const data = doc.data();
+        const userEmail = data.email || "";
         cachedLeaderboardUsers.push({
           uid: doc.id,
+          email: userEmail,
           displayName: data.displayName || "Scholar",
           avatar: data.avatar || null,
           bio: data.bio || "Scholar",
@@ -1067,7 +1332,8 @@
           dailyPoints: data.dailyPoints ?? data.points ?? 0,
           allTimePoints: data.allTimePoints ?? data.points ?? 0,
           weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
-          streak: data.streak || 0
+          streak: data.streak || 0,
+          isPremium: isSuperAdmin(userEmail) || data.isPremium === true
         });
       });
       renderClassoreLeaderboard();
@@ -1090,36 +1356,54 @@
     firebase.auth().onAuthStateChanged(async user => {
       if (user) {
         state.user.uid = user.uid;
+        state.user.email = (user.email || "").toLowerCase().trim();
         state.user.displayName = user.displayName || state.user.displayName;
         if (!state.user.avatar && user.photoURL) {
           state.user.avatar = user.photoURL;
         }
 
-        $("#btnGoogleLogin").style.display = "none";
-        $("#btnSignOut").style.display = "inline-flex";
+        // Auto-grant special creator privileges
+        if (isSuperAdmin(state.user.email)) {
+          state.user.isAdmin = true;
+          state.user.isPremium = true;
+          console.log("[MORROW] Super Admin verified: gethminahalangoda@gmail.com");
+        }
+
+        const btnLogin = $("#btnGoogleLogin");
+        const btnLogout = $("#btnSignOut");
+        if (btnLogin) btnLogin.style.display = "none";
+        if (btnLogout) btnLogout.style.display = "inline-flex";
 
         renderUserProfile();
         initFirestoreRealtimeLeaderboard();
 
-        // Hydrate from cloud FIRST before executing any writes
         await hydrateUserFromCloud(user.uid);
       } else {
         state.user.uid = null;
+        state.user.email = null;
+        state.user.isAdmin = false;
+        state.user.isPremium = false;
         isCloudHydrated = false;
-        $("#btnGoogleLogin").style.display = "inline-flex";
-        $("#btnSignOut").style.display = "none";
+        const btnLogin = $("#btnGoogleLogin");
+        const btnLogout = $("#btnSignOut");
+        if (btnLogin) btnLogin.style.display = "inline-flex";
+        if (btnLogout) btnLogout.style.display = "none";
       }
     });
 
-    $("#btnGoogleLogin").addEventListener("click", triggerGoogleSignIn);
-    $("#btnSignOut").addEventListener("click", async () => {
-      if (window.signOutUser) {
-        await window.signOutUser();
-      } else {
-        await firebase.auth().signOut();
-      }
-      location.reload();
-    });
+    const btnLogin = $("#btnGoogleLogin");
+    if (btnLogin) btnLogin.addEventListener("click", triggerGoogleSignIn);
+    const btnLogout = $("#btnSignOut");
+    if (btnLogout) {
+      btnLogout.addEventListener("click", async () => {
+        if (window.signOutUser) {
+          await window.signOutUser();
+        } else {
+          await firebase.auth().signOut();
+        }
+        location.reload();
+      });
+    }
   }
 
   // -------------------------------------------------------------
@@ -1129,58 +1413,72 @@
     renderUserProfile();
 
     const slider = $("#dailyGoalSlider");
-    slider.value = state.settings.dailyGoalHours;
-    $("#dailyGoalLabel").textContent = `${state.settings.dailyGoalHours.toFixed(1)}h`;
-    slider.addEventListener("input", e => {
-      state.settings.dailyGoalHours = parseFloat(e.target.value);
-      $("#dailyGoalLabel").textContent = `${state.settings.dailyGoalHours.toFixed(1)}h`;
-    });
+    if (slider) {
+      slider.value = state.settings.dailyGoalHours;
+      const lbl = $("#dailyGoalLabel");
+      if (lbl) lbl.textContent = `${state.settings.dailyGoalHours.toFixed(1)}h`;
+      slider.addEventListener("input", e => {
+        state.settings.dailyGoalHours = parseFloat(e.target.value);
+        if (lbl) lbl.textContent = `${state.settings.dailyGoalHours.toFixed(1)}h`;
+      });
+    }
 
-    $("#themeSwitch").addEventListener("click", () => {
-      const next = state.settings.theme === "dark" ? "light" : "dark";
-      state.settings.theme = next;
-      applyTheme(next);
-      applyAccentColor(state.subjects[0]?.color || "#ca3838");
-      saveLocalState();
-    });
+    const themeSw = $("#themeSwitch");
+    if (themeSw) {
+      themeSw.addEventListener("click", () => {
+        const next = state.settings.theme === "dark" ? "light" : "dark";
+        state.settings.theme = next;
+        applyTheme(next);
+        applyAccentColor(state.subjects[0]?.color || "#ca3838");
+        saveLocalState();
+      });
+    }
 
-    $("#btnSavePreferences").addEventListener("click", () => {
-      const name = $("#prefDisplayName").value.trim();
-      const bio = $("#prefBio").value.trim();
-      if (name) state.user.displayName = name;
-      state.user.bio = bio;
-      saveLocalState();
-      renderUserProfile();
-      renderClassoreLeaderboard();
-      showModal("Preferences Saved", "Your settings and scholar profile have been updated.", [{ label: "OK", action: closeModal }]);
-    });
+    const savePrefBtn = $("#btnSavePreferences");
+    if (savePrefBtn) {
+      savePrefBtn.addEventListener("click", () => {
+        const name = $("#prefDisplayName").value.trim();
+        const bio = $("#prefBio").value.trim();
+        if (name) state.user.displayName = name;
+        state.user.bio = bio;
+        saveLocalState();
+        renderUserProfile();
+        renderClassoreLeaderboard();
+        showModal("Preferences Saved", "Your settings and scholar profile have been updated.", [{ label: "OK", action: closeModal }]);
+      });
+    }
 
-    $("#btnSyncCloud").addEventListener("click", () => {
-      saveLocalState();
-      showModal("Synchronized", "Your stats and points are synced across devices.", [{ label: "OK", action: closeModal }]);
-    });
+    const syncCloudBtn = $("#btnSyncCloud");
+    if (syncCloudBtn) {
+      syncCloudBtn.addEventListener("click", () => {
+        saveLocalState();
+        showModal("Synchronized", "Your stats and points are synced across devices.", [{ label: "OK", action: closeModal }]);
+      });
+    }
 
     const dropZone = $("#avatarDropZone");
     const fileInput = $("#avatarFileInput");
 
-    dropZone.addEventListener("dragover", e => {
-      e.preventDefault();
-      dropZone.classList.add("dragover");
-    });
-    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-    dropZone.addEventListener("drop", e => {
-      e.preventDefault();
-      dropZone.classList.remove("dragover");
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        handleAvatarFile(e.dataTransfer.files[0]);
-      }
-    });
+    if (dropZone && fileInput) {
+      dropZone.addEventListener("dragover", e => {
+        e.preventDefault();
+        dropZone.classList.add("dragover");
+      });
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+      dropZone.addEventListener("drop", e => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleAvatarFile(e.dataTransfer.files[0]);
+        }
+      });
 
-    fileInput.addEventListener("change", e => {
-      if (e.target.files && e.target.files[0]) {
-        handleAvatarFile(e.target.files[0]);
-      }
-    });
+      fileInput.addEventListener("change", e => {
+        if (e.target.files && e.target.files[0]) {
+          handleAvatarFile(e.target.files[0]);
+        }
+      });
+    }
   }
 
   function handleAvatarFile(file) {
@@ -1204,15 +1502,23 @@
   }
 
   function renderUserProfile() {
-    $("#sideUserName").textContent = state.user.displayName;
-    $("#prefDisplayName").value = state.user.displayName;
-    $("#prefBio").value = state.user.bio;
+    const isVerified = isUserPremium(state.user);
+    const sideName = $("#sideUserName");
+    if (sideName) {
+      sideName.innerHTML = `<span>${state.user.displayName}</span> ${getVerifiedBadgeHtml(isVerified)}`;
+    }
+
+    const prefName = $("#prefDisplayName");
+    if (prefName) prefName.value = state.user.displayName;
+    const prefBio = $("#prefBio");
+    if (prefBio) prefBio.value = state.user.bio;
+
     renderAvatar($("#sideAvatarContainer"), state.user, "40px");
     renderAvatar($("#avatarPreviewBox"), state.user, "60px");
   }
 
   // -------------------------------------------------------------
-  // 12. CUSTOM MODAL
+  // 12. CUSTOM IN-APP MODAL
   // -------------------------------------------------------------
   const modalEl = $("#customModal");
   const modalTitle = $("#modalTitle");
@@ -1220,6 +1526,7 @@
   const modalButtons = $("#modalButtons");
 
   function showModal(title, desc, buttons = []) {
+    if (!modalEl) return;
     modalTitle.textContent = title;
     modalDesc.textContent = desc;
     modalButtons.innerHTML = "";
@@ -1237,7 +1544,7 @@
   }
 
   function closeModal() {
-    modalEl.classList.remove("active");
+    if (modalEl) modalEl.classList.remove("active");
   }
 
   // -------------------------------------------------------------
@@ -1268,7 +1575,10 @@
     placeIndicator(navIndicator, $(`.tab[aria-selected="true"]`));
 
     if (name === "progress") renderProgressTab();
-    if (name === "ranking") renderClassoreLeaderboard();
+    if (name === "ranking") {
+      renderClassoreLeaderboard();
+      initClassoreLeagues();
+    }
     if (name === "timer") placeIndicator($("#segIndicator"), $('#seg [aria-pressed="true"]'), false);
   }
 
@@ -1292,6 +1602,7 @@
   // -------------------------------------------------------------
   // INITIALIZATION
   // -------------------------------------------------------------
+  injectDynamicStyles();
   checkDayRoll();
   applyTheme(state.settings.theme);
   applyAccentColor(state.subjects[0]?.color || "#ca3838");
