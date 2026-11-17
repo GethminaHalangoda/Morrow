@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en" class="boot">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MORROW — Deep Focus</title>
+
+<!-- Favicon -->
+<link rel="icon" type="image/jpeg" href="App logo.jpg">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<!-- Firebase SDKs & Config -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+
+<style>
+/* ============================================================
+   TOKENS & SMOOTH ACCENT TRANSITIONS
+   ============================================================ */
+@property --accent      { syntax: "<color>"; inherits: true; initial-value: #ca3838; }
+@property --accent-2    { syntax: "<color>"; inherits: true; initial-value: #e26d6d; }
+@property --accent-soft { syntax: "<color>"; inherits: true; initial-value: rgba(202, 56, 56, .12); }
+@property --accent-mid  { syntax: "<color>"; inherits: true; initial-value: rgba(202, 56, 56, .3); }
+@property --on-accent   { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #171a23;
+  --surface-raised: #1f2330;
+  --line: rgba(255, 255, 255, .08);
+  --line-strong: rgba(255, 255, 255, .15);
+  --ink: #eef0f6;
+  --muted: #9aa2b5;
+  --accent: #ca3838;
+  --accent-2: #e26d6d;
+  --accent-soft: rgba(202, 56, 56, .12);
+  --accent-mid: rgba(202, 56, 56, .3);
+  --on-accent: #ffffff;
+  --flame: #ff9457;
+  --gold: #f59e0b;
+  --silver: #94a3b8;
+  --bronze: #b45309;
+  --danger: #ff6b88;
+  --status-green: #10b981;
+  --status-orange: #f59e0b;
+  --status-red: #ef4444;
+  --radius: 16px;
+  --font-mono: 'JetBrains Mono', monospace;
+  transition: --accent .5s ease, --accent-2 .5s ease, --accent-soft .5s ease, --accent-mid .5s ease;
+}
+
+:root[data-theme="light"] {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --surface-raised: #f8f9fc;
+  --line: rgba(20, 23, 31, .08);
+  --line-strong: rgba(20, 23, 31, .15);
+  --ink: #14171f;
+  --muted: #667085;
+  --accent-soft: rgba(202, 56, 56, .09);
+  --accent-mid: rgba(202, 56, 56, .22);
+}
+
+* {
+  box-sizing: border-box;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+input, textarea {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+html, body { margin: 0; min-height: 100vh; }
+body {
+  font-family: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.5;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color .3s ease, color .3s ease;
+}
+html.boot, html.boot * { transition: none !important; }
+
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+[hidden] { display: none !important; }
+
+.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+  position: sticky; top: 0; height: 100vh;
+  padding: 24px 16px;
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; justify-content: space-between;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 20;
+}
+.brand { display: flex; align-items: center; gap: 12px; padding: 0 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -.02em; }
+.brand img { width: 34px; height: 34px; border-radius: 10px; object-fit: cover; box-shadow: 0 4px 14px var(--accent-mid); }
+
+.nav { position: relative; display: flex; flex-direction: column; gap: 4px; flex: 1; margin-top: 24px; }
+.indicator { position: absolute; left: 0; top: 0; width: 0; height: 0; border-radius: 10px; pointer-events: none; opacity: 0; }
+.indicator.ready { opacity: 1; transition: transform .32s cubic-bezier(.3, 1.2, .4, 1), width .32s, height .32s; }
+.nav .indicator { background: var(--accent-soft); }
+
+.tab {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 0; border-radius: 10px;
+  background: none; color: var(--muted); font-weight: 600; text-align: left;
+  cursor: pointer; transition: color .2s;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); }
+.tab[aria-selected="true"] svg { color: var(--accent); }
+
+/* Sidebar User Badge */
+.sidebar-user {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.avatar-wrap { position: relative; width: 40px; height: 40px; flex: none; }
+.user-avatar-elem {
+  width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+  background: var(--surface-raised); border: 1px solid var(--line-strong);
+  display: grid; place-items: center; font-weight: 700; font-size: .85rem; color: var(--ink);
+}
+.presence-dot {
+  position: absolute; bottom: 0; right: 0; width: 11px; height: 11px;
+  border-radius: 50%; border: 2px solid var(--surface);
+}
+.presence-dot.online { background: var(--status-orange); }
+.presence-dot.studying { background: var(--status-green); box-shadow: 0 0 8px rgba(16, 185, 129, 0.7); }
+.presence-dot.offline { background: var(--status-red); }
+.user-name-line { font-weight: 700; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+.user-streak-line { font-size: .78rem; color: var(--muted); }
+
+/* Main Content */
+main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px, 3.5vw, 40px) 72px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; margin-bottom: 24px; }
+.topbar h1 { margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -.025em; }
+
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.streak-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line);
+  font-weight: 600; font-size: .9rem; white-space: nowrap;
+}
+.flame-icon { color: var(--flame); font-size: 1.15rem; }
+
+.panel { animation: panel-in .25s ease both; }
+@keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+
+/* Buttons & Micro-interactions */
+.btn {
+  position: relative; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-width: 108px; padding: 12px 24px;
+  border: 0; border-radius: 12px;
+  background: var(--accent); color: var(--on-accent);
+  font-weight: 700; font-size: .92rem; cursor: pointer;
+  transition: transform .15s ease, box-shadow .2s ease, background-color .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { box-shadow: 0 10px 24px -10px var(--accent); }
+.btn:active { transform: scale(.96); }
+.btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); }
+.btn.ghost:hover { box-shadow: none; background: var(--accent-soft); border-color: var(--accent); }
+.btn.save-accent { background: #10b981; color: #fff; }
+.btn.save-accent:hover { box-shadow: 0 10px 24px -10px rgba(16, 185, 129, 0.5); }
+
+.claim-chip-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 999px;
+  background: linear-gradient(135deg, rgba(202, 56, 56, .15), rgba(245, 158, 11, .15));
+  border: 1px solid var(--accent); color: var(--ink);
+  font-weight: 700; font-size: .88rem; cursor: pointer;
+  transition: all .2s;
+}
+.claim-chip-btn:hover { transform: scale(1.03); box-shadow: 0 4px 16px var(--accent-soft); }
+
+.fx-ripple {
+  position: absolute; border-radius: 50%;
+  background: currentColor; opacity: .26;
+  transform: scale(0); pointer-events: none;
+  animation: fx-ripple .6s ease-out forwards;
+}
+@keyframes fx-ripple { to { transform: scale(1); opacity: 0; } }
+
+/* ============================================================
+   TIMER TAB & LOCKED SUBJECTS
+   ============================================================ */
+.timer-wrap { display: flex; flex-direction: column; align-items: center; }
+
+.seg { position: relative; display: inline-flex; padding: 4px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.seg .indicator { background: var(--accent); border-radius: 9px; }
+.seg button {
+  position: relative; z-index: 1; border: 0; background: none; cursor: pointer;
+  padding: 8px 22px; border-radius: 9px; font-weight: 600; font-size: .92rem; color: var(--muted);
+  transition: color .2s;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { color: var(--on-accent); }
+
+/* Subjects Bar with lock states */
+.subjects-container { position: relative; margin-top: 20px; }
+.subjects { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 560px; transition: opacity .3s; }
+.subjects.timer-locked { opacity: 0.55; }
+.subjects.timer-locked .chip-main { cursor: not-allowed !important; }
+
+.subject-lock-hint {
+  display: none; align-items: center; justify-content: center; gap: 6px;
+  font-size: .78rem; color: var(--flame); margin-top: 6px; font-weight: 600;
+}
+.subject-lock-hint.visible { display: flex; }
+
+.chip {
+  position: relative; display: inline-flex; align-items: center;
+  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface);
+  transition: all .25s ease;
+}
+.chip-main {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border: 0; border-radius: 999px; background: none;
+  font-weight: 600; font-size: .9rem; cursor: pointer;
+}
+.chip-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.chip.on { background: var(--c); border-color: var(--c); color: var(--oc); box-shadow: 0 4px 16px var(--accent-mid); }
+.chip.on .chip-dot { background: var(--oc); }
+
+.topic-input-container {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; max-width: 440px; margin-top: 14px;
+  padding: 10px 16px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.topic-input-container input {
+  flex: 1; border: 0; background: none; color: var(--ink); font: inherit; outline: none; font-size: .9rem;
+}
+
+/* Ring & Wave Canvas */
+.ring { position: relative; width: min(340px, 80vw); aspect-ratio: 1; margin: 24px 0 4px; }
+.ring::before {
+  content: ""; position: absolute; inset: 17%; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft), transparent 68%);
+  animation: breathe 4.2s ease-in-out infinite; animation-play-state: paused;
+}
+.ring.running::before { animation-play-state: running; }
+@keyframes breathe { 0%, 100% { transform: scale(.9); opacity: .55; } 50% { transform: scale(1.08); opacity: 1; } }
+
+.wave-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  border-radius: 50%; pointer-events: none; z-index: 1;
+}
+
+.ring svg { position: relative; z-index: 2; width: 100%; height: 100%; overflow: visible; }
+.track { fill: none; stroke: var(--line-strong); stroke-width: 7; }
+.progress {
+  fill: none; stroke-width: 7; stroke-linecap: round;
+  filter: drop-shadow(0 0 6px var(--accent-mid));
+  transition: stroke-dashoffset .5s ease, filter .4s;
+}
+
+.readout { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
+.time { display: flex; justify-content: center; font-family: var(--font-mono); font-size: clamp(3rem, 12vw, 4.4rem); font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+.status { font-size: .95rem; color: var(--muted); }
+.active-topic-tag { font-size: .8rem; color: var(--muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 24px; }
+
+/* Pending Session Banner */
+.pending-session-card {
+  display: none; align-items: center; justify-content: space-between; gap: 14px;
+  width: 100%; max-width: 480px; margin-top: 20px; padding: 14px 18px; border-radius: 14px;
+  background: var(--surface-raised); border: 1px solid var(--accent);
+}
+.pending-session-card.visible { display: flex; }
+
+.week { width: 100%; max-width: 480px; margin-top: 32px; padding: 20px 22px 18px; }
+.week-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+.week-head strong { font-size: 1.05rem; }
+.week-head span { font-size: .85rem; color: var(--muted); }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.day { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .75rem; color: var(--muted); }
+.dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--line-strong); }
+.dot svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.day:not(.done) .dot svg { display: none; }
+.day.done .dot { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.day.today .dot { border-color: var(--accent); }
+.day.today { color: var(--ink); font-weight: 600; }
+
+/* ============================================================
+   TASKS TAB
+   ============================================================ */
+.add { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.field {
+  flex: 1; min-width: 180px; padding: 13px 16px;
+  border: 1px solid var(--line-strong); border-radius: 12px;
+  background: var(--surface); color: var(--ink); font: inherit;
+}
+.field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
+
+.task-list { list-style: none; margin: 0; padding: 0; }
+.task { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.task:last-child { border-bottom: 0; }
+.task-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.task.done .task-text { color: var(--muted); text-decoration: line-through; }
+.task-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
+
+.check {
+  width: 26px; height: 26px; flex: none; padding: 0; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  border: 2px solid var(--line-strong); background: transparent; color: var(--on-accent);
+}
+.check svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: none; }
+.check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.check[aria-checked="true"] svg { display: block; }
+.del-task-btn { border: 0; background: none; padding: 6px; color: var(--muted); cursor: pointer; border-radius: 6px; }
+.del-task-btn:hover { color: var(--danger); background: var(--accent-soft); }
+.empty { padding: 36px 16px; text-align: center; color: var(--muted); }
+
+/* ============================================================
+   PROGRESS TAB (Line Wave Chart)
+   ============================================================ */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.stat { padding: 18px 20px; }
+.stat span { display: block; font-size: .88rem; color: var(--muted); }
+.stat strong { display: block; margin-top: 4px; font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; }
+
+.chart { padding: 22px; position: relative; overflow: hidden; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.chart h2, .goal h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+
+.line-chart-container { width: 100%; height: 190px; position: relative; margin-top: 10px; }
+#lineChartSvg { width: 100%; height: 100%; overflow: visible; }
+.chart-path-bg { fill: url(#lineChartGrad); opacity: .3; }
+.chart-path-stroke { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 4px 10px var(--accent-mid)); }
+.chart-point { fill: var(--surface); stroke: var(--accent); stroke-width: 3; r: 5; cursor: pointer; }
+.chart-labels-x { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: .78rem; color: var(--muted); margin-top: 8px; }
+
+.goal { padding: 22px; margin-top: 14px; }
+.goal-row { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: 10px; }
+.meter { height: 10px; border-radius: 999px; background: var(--line-strong); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0%; border-radius: inherit; background: var(--accent); transition: width .5s ease; }
+
+.sync-bar { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+/* ============================================================
+   RANKING TAB (Exact Classore Template Layout)
+   ============================================================ */
+.classore-banner {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 36px 20px 28px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.classore-banner h2 {
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  margin: 0 0 6px;
+}
+.classore-banner p {
+  color: var(--muted);
+  font-size: .95rem;
+  max-width: 50ch;
+  margin: 0 auto 24px;
+}
+.trophy-svg-wrap {
+  width: 140px;
+  height: 90px;
+  margin: 0 auto;
+}
+.trophy-svg-wrap svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Category & League Tabs */
+.classore-filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.league-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.league-tab-btn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: .88rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .2s;
+}
+.league-tab-btn.active {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.classore-sub-filters {
+  display: flex;
+  gap: 14px;
+  font-size: .88rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+  margin-bottom: 22px;
+  overflow-x: auto;
+}
+.sub-filter-item {
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 600;
+  transition: color .2s;
+}
+.sub-filter-item:hover, .sub-filter-item.active {
+  color: var(--accent);
+}
+
+/* Main Grid */
+.classore-grid {
+  display: grid;
+  grid-template-columns: 1fr 310px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* Leaderboard List (Left Column) */
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  transition: all .2s;
+}
+.leaderboard-row:hover {
+  background: var(--surface-raised);
+}
+.leaderboard-row.is-me {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.row-user-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rank-badge-wrap {
+  width: 32px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: .95rem;
+}
+.badge-gold { color: var(--gold); }
+.badge-silver { color: var(--silver); }
+.badge-bronze { color: var(--bronze); }
+
+.user-row-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  object-fit: cover; background: var(--surface-raised);
+  border: 1px solid var(--line-strong); display: grid; place-items: center;
+  font-weight: 700; font-size: .85rem;
+}
+.user-name-title { font-weight: 700; font-size: .95rem; }
+.user-sub-location { font-size: .78rem; color: var(--muted); }
+
+.points-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: .85rem;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* User Card (Right Column) */
+.user-summary-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.profile-card-avatar {
+  width: 74px; height: 74px; border-radius: 50%;
+  object-fit: cover; background: var(--surface-raised);
+  border: 2px solid var(--accent); display: grid; place-items: center;
+  font-size: 1.4rem; font-weight: 800; margin-bottom: 12px;
+}
+.profile-card-name { font-size: 1.15rem; font-weight: 800; margin-bottom: 2px; }
+.profile-card-bio { font-size: .82rem; color: var(--muted); margin-bottom: 20px; }
+
+.stats-2x2-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+.stat-mini-tile {
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: left;
+}
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .75rem;
+  color: var(--muted);
+}
+.tile-num {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.relative-context-banner {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  font-size: .82rem;
+  font-weight: 600;
+  width: 100%;
+  text-align: center;
+}
+
+/* ============================================================
+   PREFERENCES TAB
+   ============================================================ */
+.prefs { padding: 8px 24px; }
+.pref { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.pref:last-child { border-bottom: 0; }
+.pref h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+.pref p { margin: 3px 0 0; font-size: .88rem; color: var(--muted); }
+
+.avatar-drop-zone {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px; border-radius: 14px;
+  border: 2px dashed var(--line-strong); background: var(--surface-raised);
+  transition: all .2s ease; cursor: pointer;
+}
+.avatar-drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.preview-large-avatar {
+  width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+  background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center;
+  font-size: 1.2rem; font-weight: 700;
+}
+
+.subject-edit-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; width: 100%; max-width: 420px; }
+.subject-edit-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-radius: 10px; background: var(--surface-raised); border: 1px solid var(--line);
+}
+.new-subject-form { display: flex; gap: 8px; margin-top: 10px; width: 100%; max-width: 420px; }
+
+.switch {
+  position: relative; flex: none; width: 54px; height: 30px; padding: 0; border: 0; border-radius: 999px;
+  background: var(--line-strong); cursor: pointer; transition: background-color .25s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+  transition: transform .3s cubic-bezier(.3, 1.6, .5, 1);
+}
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(24px); }
+
+.credit-footer { text-align: center; margin-top: 24px; font-size: .88rem; color: var(--muted); }
+.credit-footer strong { color: var(--ink); }
+
+/* Custom Modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  background: rgba(10, 12, 18, 0.75);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  opacity: 0; pointer-events: none; transition: opacity .25s ease;
+}
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal-card {
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 20px; padding: 28px; max-width: 440px; width: 100%;
+  text-align: center; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 20px var(--accent-mid);
+  transform: scale(.95); transition: transform .25s ease;
+}
+.modal-overlay.active .modal-card { transform: scale(1); }
+.modal-icon { width: 50px; height: 50px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin: 0 auto 16px; }
+
+/* Responsive */
+@media (max-width: 860px) {
+  .classore-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; inset: auto 0 0 0; height: auto;
+    flex-direction: row; gap: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-right: 0; border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 95%, transparent);
+  }
+  .brand, .sidebar-user { display: none; }
+  .nav { flex-direction: row; width: 100%; margin: 0; gap: 0; }
+  .tab { flex: 1; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; font-size: .72rem; text-align: center; }
+  main { padding-top: 20px; padding-bottom: 120px; }
+  .pref { flex-direction: column; align-items: stretch; }
+}
+</style>
+</head>
+
+<body oncontextmenu="return false;">
+
+<div class="app">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+    <div>
+      <div class="brand">
+        <img src="App logo.jpg" alt="MORROW Logo" onerror="this.src='https://api.dicebear.com/7.x/identicon/svg?seed=MORROW'">
+        <span>MORROW</span>
+      </div>
+
+      <nav class="nav" role="tablist" aria-orientation="vertical">
+        <span class="indicator" id="navIndicator" aria-hidden="true"></span>
+        <button class="tab" role="tab" id="tab-timer" aria-selected="true" data-tab="timer">
+          <i data-lucide="timer"></i><span>Timer</span>
+        </button>
+        <button class="tab" role="tab" id="tab-tasks" aria-selected="false" data-tab="tasks" tabindex="-1">
+          <i data-lucide="check-square"></i><span>Tasks</span>
+        </button>
+        <button class="tab" role="tab" id="tab-progress" aria-selected="false" data-tab="progress" tabindex="-1">
+          <i data-lucide="activity"></i><span>Progress</span>
+        </button>
+        <button class="tab" role="tab" id="tab-ranking" aria-selected="false" data-tab="ranking" tabindex="-1">
+          <i data-lucide="trophy"></i><span>Ranking</span>
+        </button>
+        <button class="tab" role="tab" id="tab-preferences" aria-selected="false" data-tab="preferences" tabindex="-1">
+          <i data-lucide="sliders"></i><span>Preferences</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Sidebar User Snapshot -->
+    <div class="sidebar-user">
+      <div class="avatar-wrap">
+        <div id="sideAvatarContainer" class="user-avatar-elem"></div>
+        <span class="presence-dot offline" id="sidePresence"></span>
+      </div>
+      <div style="min-width: 0;">
+        <div class="user-name-line" id="sideUserName">Scholar</div>
+        <div class="user-streak-line">🔥 <span id="sideStreakNum">0</span> day streak</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN CONTENT ===================== -->
+  <main>
+    <header class="topbar">
+      <h1 id="pageTitle">Timer</h1>
+      <div class="topbar-actions">
+        <button class="claim-chip-btn" id="topClaimPointsBtn" style="display: none;">
+          <i data-lucide="gift" style="width: 15px; height: 15px;"></i>
+          <span>Claim Points</span>
+        </button>
+        <div class="streak-chip" title="Daily study streak">
+          <span class="flame-icon">🔥</span>
+          <span id="topStreakText">0 day streak</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ---------- TAB 1: TIMER (Stopwatch First) ---------- -->
+    <section class="panel" id="panel-timer" role="tabpanel">
+      <div class="timer-wrap">
+
+        <!-- Mode Toggle (Stopwatch first) -->
+        <div class="seg" id="seg">
+          <span class="indicator" id="segIndicator"></span>
+          <button type="button" data-mode="stopwatch" aria-pressed="true">Stopwatch</button>
+          <button type="button" data-mode="pomodoro" aria-pressed="false">Pomodoro</button>
+        </div>
+
+        <!-- Subjects Container (Locked during active timer) -->
+        <div class="subjects-container">
+          <div class="subjects" id="subjectsBar"></div>
+          <div class="subject-lock-hint" id="subjectLockHint">
+            <i data-lucide="lock" style="width: 12px; height: 12px;"></i>
+            <span>Stop timer to change subjects</span>
+          </div>
+        </div>
+
+        <!-- Current Topic Input -->
+        <div class="topic-input-container">
+          <i data-lucide="edit-3" style="width: 16px; height: 16px; color: var(--muted);"></i>
+          <input type="text" id="topicInput" placeholder="Study topic (e.g. Calculus Problems)" maxlength="60">
+        </div>
+
+        <!-- Ring with Media Audio Wave Visualizer inside -->
+        <div class="ring" id="ringWrap">
+          <canvas class="wave-canvas" id="waveCanvas" width="340" height="340"></canvas>
+          <svg viewBox="0 0 240 240">
+            <circle class="track" cx="120" cy="120" r="100"/>
+            <circle class="progress" id="ringProgress" cx="120" cy="120" r="100" transform="rotate(-90 120 120)" stroke="var(--accent)"/>
+          </svg>
+          <div class="readout">
+            <div class="time" id="timeDigits">00:00</div>
+            <div class="status" id="timerStatus">Ready</div>
+            <div class="active-topic-tag" id="activeTopicTag">No topic selected</div>
+          </div>
+        </div>
+
+        <!-- Timer Controls with Explicit Save Button -->
+        <div class="controls">
+          <button type="button" class="btn" id="startBtn" data-fx="ripple"><span id="startBtnLabel">Start</span></button>
+          <button type="button" class="btn save-accent" id="saveSessionBtn" data-fx="ripple">Save Session</button>
+          <button type="button" class="btn ghost" id="resetBtn" data-fx="ripple">Reset</button>
+          <button type="button" class="btn ghost" id="skipBtn" data-fx="ripple" hidden>Skip</button>
+        </div>
+
+        <!-- Pending Points / Verification Card -->
+        <div class="pending-session-card" id="pendingSessionCard">
+          <div>
+            <strong style="color: #10b981; font-size: .95rem;">Unclaimed Session Time</strong>
+            <div style="font-size: .8rem; color: var(--muted);" id="pendingSessionDetails">5m focused • Tap to claim your points</div>
+          </div>
+          <button type="button" class="btn" id="claimPointsActionBtn" style="padding: 8px 16px; min-width: 0;">Claim Points</button>
+        </div>
+
+        <!-- Week Streak Guide from template -->
+        <div class="week card">
+          <div class="week-head">
+            <strong id="streakHeadTitle">0 day streak</strong>
+            <span id="streakBestTitle">Keep it going!</span>
+          </div>
+          <div class="days" id="weekDaysContainer"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ---------- TAB 2: TASKS ---------- -->
+    <section class="panel" id="panel-tasks" role="tabpanel" hidden>
+      <form class="add" id="taskForm" autocomplete="off">
+        <input class="field" id="taskInput" type="text" maxlength="120" placeholder="What are you working on?" required>
+        <select class="field" id="taskSubSelect"></select>
+        <button type="submit" class="btn" data-fx="ripple">Add task</button>
+      </form>
+      <div class="card">
+        <ul class="task-list" id="taskList"></ul>
+        <div class="empty" id="taskEmpty">No tasks yet. Add your first goal above.</div>
+      </div>
+      <p style="font-size: .84rem; color: var(--muted); margin-top: 14px;">Finished tasks are automatically cleared once your tab closes.</p>
+    </section>
+
+    <!-- ---------- TAB 3: PROGRESS (Animated Line Wave Chart) ---------- -->
+    <section class="panel" id="panel-progress" role="tabpanel" hidden>
+      <div class="stats">
+        <div class="stat card"><span>Focused today</span><strong id="statToday">0h 0m</strong></div>
+        <div class="stat card"><span>This week</span><strong id="statWeek">0h 0m</strong></div>
+        <div class="stat card"><span>Total Points</span><strong id="statTotalPts">0 Pts</strong></div>
+      </div>
+
+      <div class="chart card">
+        <div class="chart-head">
+          <h2>Focus Wave this week</h2>
+          <span style="font-size: .85rem; color: var(--muted);" id="chartTotalBadge">0.0h total</span>
+        </div>
+        <div class="line-chart-container">
+          <svg id="lineChartSvg" viewBox="0 0 600 160" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="lineChartGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.6"/>
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0"/>
+              </linearGradient>
+            </defs>
+            <path class="chart-path-bg" id="chartAreaPath" d=""></path>
+            <path class="chart-path-stroke" id="chartLinePath" d=""></path>
+            <g id="chartPointsGroup"></g>
+          </svg>
+        </div>
+        <div class="chart-labels-x" id="chartXLabels"></div>
+      </div>
+
+      <div class="goal card">
+        <div class="goal-row">
+          <span id="goalTextRatio">0.0h of 4.0h</span>
+          <span class="muted" id="goalPercent">0%</span>
+        </div>
+        <div class="meter"><i id="goalMeterBar"></i></div>
+      </div>
+
+      <div class="sync-bar">
+        <button class="btn" id="btnSyncCloud" data-fx="ripple">
+          <i data-lucide="cloud-check" style="width: 16px; height: 16px;"></i>
+          <span>Save & Sync Data</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ---------- TAB 4: RANKING (Classore Design) ---------- -->
+    <section class="panel" id="panel-ranking" role="tabpanel" hidden>
+      
+      <!-- Classore Banner with Trophy -->
+      <div class="classore-banner">
+        <h2>Leaderboard</h2>
+        <p>Explore available categories and unlock your potential. Earn point rewards as you learn.</p>
+        <div class="trophy-svg-wrap">
+          <svg viewBox="0 0 160 100" fill="none">
+            <path d="M45 28C28 28 20 45 32 60C40 70 54 72 60 74" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <path d="M115 28C132 28 140 45 128 60C120 70 106 72 100 74" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <path d="M50 20H110V52C110 70 96 82 80 82C64 82 50 70 50 52V20Z" fill="var(--surface-raised)" stroke="currentColor" stroke-width="3"/>
+            <ellipse cx="80" cy="20" rx="30" ry="8" fill="var(--accent-soft)" stroke="currentColor" stroke-width="3"/>
+            <path d="M72 82V94H88V82" stroke="currentColor" stroke-width="3"/>
+            <path d="M60 94H100" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="24" y1="36" x2="16" y2="34" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="136" y1="36" x2="144" y2="34" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="80" y1="4" x2="80" y2="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Filters & League Switchers -->
+      <div class="classore-filter-bar">
+        <div class="league-tabs">
+          <button class="league-tab-btn active" data-league="weekly">Weekly League</button>
+          <button class="league-tab-btn" data-league="daily">Daily Sprint</button>
+          <button class="league-tab-btn" data-league="alltime">All-Time</button>
+        </div>
+
+        <div id="authContainer">
+          <button type="button" class="btn ghost" id="btnGoogleLogin" style="padding: 7px 16px; font-size: .85rem;">
+            <span>Sign In</span>
+          </button>
+          <button type="button" class="btn ghost" id="btnSignOut" style="display: none; padding: 7px 16px; font-size: .85rem;">Sign Out</button>
+        </div>
+      </div>
+
+      <div class="classore-sub-filters" id="subjectFilterPills">
+        <span class="sub-filter-item active" data-sub="all">All Subjects</span>
+      </div>
+
+      <!-- 2-Column Classore Layout -->
+      <div class="classore-grid">
+        
+        <!-- Left: Ranked Scholars List -->
+        <div class="leaderboard-list" id="classoreLeaderboardRows">
+          <div style="text-align: center; color: var(--muted); padding: 48px;">
+            Loading verified scholars...
+          </div>
+        </div>
+
+        <!-- Right: Current Scholar Card -->
+        <div class="card user-summary-card">
+          <div class="profile-card-avatar" id="classoreUserAvatar"></div>
+          <div class="profile-card-name" id="classoreUserName">Scholar (You)</div>
+          <div class="profile-card-bio" id="classoreUserBio">Local Scholar</div>
+
+          <div class="stats-2x2-grid">
+            <div class="stat-mini-tile">
+              <div class="tile-head">
+                <i data-lucide="trophy" style="width: 14px; height: 14px; color: var(--gold);"></i>
+                <span>Ranking</span>
+              </div>
+              <div class="tile-num" id="classoreTileRank">--</div>
+            </div>
+
+            <div class="stat-mini-tile">
+              <div class="tile-head">
+                <i data-lucide="zap" style="width: 14px; height: 14px; color: var(--flame);"></i>
+                <span>Streak</span>
+              </div>
+              <div class="tile-num" id="classoreTileStreak">0</div>
+            </div>
+
+            <div class="stat-mini-tile">
+              <div class="tile-head">
+                <i data-lucide="award" style="width: 14px; height: 14px; color: #10b981;"></i>
+                <span>Points</span>
+              </div>
+              <div class="tile-num" id="classoreTilePoints">0</div>
+            </div>
+
+            <div class="stat-mini-tile">
+              <div class="tile-head">
+                <i data-lucide="clock" style="width: 14px; height: 14px; color: var(--accent);"></i>
+                <span>Focus</span>
+              </div>
+              <div class="tile-num" id="classoreTileTime">0.0h</div>
+            </div>
+          </div>
+
+          <div class="relative-context-banner" id="classoreRelativeBanner">
+            Study today to establish your standing!
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ---------- TAB 5: PREFERENCES ---------- -->
+    <section class="panel" id="panel-preferences" role="tabpanel" hidden>
+      <div class="card prefs">
+        
+        <div class="pref">
+          <div>
+            <h2>Profile Photo</h2>
+            <p>Drag & drop an image or click to select from your device.</p>
+          </div>
+          <div class="avatar-drop-zone" id="avatarDropZone">
+            <div class="preview-large-avatar" id="avatarPreviewBox"></div>
+            <div>
+              <input type="file" id="avatarFileInput" accept="image/*" style="display: none;">
+              <button type="button" class="btn ghost" style="padding: 8px 16px;" onclick="document.getElementById('avatarFileInput').click()">Choose File</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pref">
+          <div><h2>Scholar Name</h2><p>How you appear on the leaderboard.</p></div>
+          <input type="text" class="field" id="prefDisplayName" placeholder="Scholar alias" maxlength="28" style="max-width: 260px;">
+        </div>
+
+        <div class="pref">
+          <div><h2>Custom Bio / City</h2><p>Appears under your name on the leaderboard.</p></div>
+          <input type="text" class="field" id="prefBio" placeholder="e.g. Colombo, LK or Pure Mathematics" maxlength="80" style="max-width: 320px;">
+        </div>
+
+        <div class="pref">
+          <div>
+            <h2>Subject Management</h2>
+            <p>Customize discipline names and distinct colors.</p>
+          </div>
+          <div style="flex: 1; max-width: 440px;">
+            <div class="subject-edit-list" id="prefSubjectList"></div>
+            <form class="new-subject-form" id="newSubjectForm">
+              <input type="text" class="field" id="newSubName" placeholder="New subject name" required style="padding: 8px 12px;">
+              <input type="color" id="newSubColor" value="#3b82f6" style="width: 42px; height: 38px; border: 0; background: none; cursor: pointer;">
+              <button type="submit" class="btn" style="min-width: 0; padding: 8px 18px;">Add</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="pref">
+          <div><h2>Daily Target</h2><p>Hours aimed per day (2 to 18 hours).</p></div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <input type="range" id="dailyGoalSlider" min="2" max="18" step="0.5" value="4" style="accent-color: var(--accent);">
+            <strong id="dailyGoalLabel" style="min-width: 4.5ch;">4.0h</strong>
+          </div>
+        </div>
+
+        <div class="pref">
+          <div><h2>Dark Mode</h2><p>Toggle between dark and light themes.</p></div>
+          <button type="button" class="switch" id="themeSwitch" role="switch" aria-checked="true"></button>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; padding-top: 14px;">
+          <button type="button" class="btn" id="btnSavePreferences" data-fx="ripple">Save Preferences</button>
+        </div>
+
+        <div class="credit-footer">
+          Made by <strong>Gethmina Halangoda</strong>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Custom First Time / Alert Modal -->
+<div class="modal-overlay" id="customModal">
+  <div class="modal-card">
+    <div class="modal-icon"><i data-lucide="sparkles" id="modalIcon"></i></div>
+    <h3 id="modalTitle" style="margin: 0 0 8px; font-size: 1.25rem;">Welcome to MORROW</h3>
+    <p id="modalDesc" style="color: var(--muted); font-size: .92rem; margin: 0 0 24px; line-height: 1.5;"></p>
+    <div id="modalButtons" style="display: flex; flex-direction: column; gap: 10px;"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
