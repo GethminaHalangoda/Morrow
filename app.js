@@ -1,7 +1,8 @@
 /**
  * MORROW — Deep Focus Engine
- * Includes: Telegram-style Verified Badges, Super Admin Privileges for gethminahalangoda@gmail.com,
- * Real-time & Manual Refresh Leaderboard, Firestore 'users' Sync, and Lock-Screen Timer.
+ * Includes: Admin Control Panel & Profile Editor for gethminahalangoda@gmail.com,
+ * Real-Time Global & Direct Notifications, Telegram-Style Verified Badges,
+ * Lock-Screen Accurate Timer, Calendar Streaks, and Classore Leaderboard.
  */
 
 (() => {
@@ -11,7 +12,7 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   // -------------------------------------------------------------
-  // 0. ADMIN CONFIGURATION & SPECIAL PRIVILEGES
+  // 0. ADMIN IDENTIFICATION & PERMISSIONS
   // -------------------------------------------------------------
   const SUPER_ADMIN_EMAIL = "gethminahalangoda@gmail.com";
 
@@ -25,7 +26,7 @@
     return user.isPremium === true;
   }
 
-  // Telegram-style Verified Blue Badge SVG (8-scallop rosette with white checkmark)
+  // Telegram-style Verified Blue Badge SVG
   function getVerifiedBadgeHtml(isPremium, title = "Verified Scholar") {
     if (!isPremium) return "";
     return `
@@ -38,7 +39,7 @@
     `;
   }
 
-  // Inject styles dynamically so you don't have to touch index.html or css
+  // Dynamically inject styles for admin badges, editor, and notifications
   function injectDynamicStyles() {
     if ($("#morrow-dynamic-styles")) return;
     const style = document.createElement("style");
@@ -79,21 +80,70 @@
         background: var(--accent-soft);
         border-color: var(--accent);
       }
-      .admin-premium-toggle {
-        border: 1px solid var(--line-strong);
-        background: var(--surface-raised);
-        color: var(--muted);
-        border-radius: 6px;
-        padding: 2px 7px;
-        font-size: 0.72rem;
+      .admin-topbar-broadcast-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, rgba(36, 161, 222, 0.2), rgba(202, 56, 56, 0.2));
+        border: 1px solid #24A1DE;
+        color: #eef0f6;
+        font-size: 0.82rem;
+        font-weight: 700;
         cursor: pointer;
-        margin-left: 6px;
         transition: all 0.2s ease;
       }
-      .admin-premium-toggle.active {
-        background: rgba(36, 161, 222, 0.2);
-        color: #24A1DE;
-        border-color: #24A1DE;
+      .admin-topbar-broadcast-btn:hover {
+        transform: scale(1.04);
+        box-shadow: 0 0 14px rgba(36, 161, 222, 0.4);
+      }
+      .leaderboard-row {
+        cursor: pointer;
+      }
+      .admin-modal-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        text-align: left;
+        margin-bottom: 12px;
+      }
+      .admin-modal-field label {
+        font-size: 0.78rem;
+        color: var(--muted);
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .admin-modal-field input, .admin-modal-field textarea, .admin-modal-field select {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--line-strong);
+        background: var(--surface-raised);
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.9rem;
+        outline: none;
+      }
+      .admin-modal-field input:focus, .admin-modal-field textarea:focus {
+        border-color: var(--accent);
+      }
+      .in-app-toast-alert {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        max-width: 380px;
+        width: calc(100% - 40px);
+        background: var(--surface);
+        border: 1px solid #24A1DE;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(36, 161, 222, 0.35);
+        border-radius: 16px;
+        padding: 16px 18px;
+        z-index: 9999999;
+        animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      @keyframes toastIn {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
       }
     `;
     document.head.appendChild(style);
@@ -102,7 +152,7 @@
   // -------------------------------------------------------------
   // 1. STATE & STORAGE
   // -------------------------------------------------------------
-  const STORAGE_KEY = "MORROW_STATE_V7";
+  const STORAGE_KEY = "MORROW_STATE_V8";
 
   const defaultState = {
     user: {
@@ -172,7 +222,7 @@
   }
 
   // -------------------------------------------------------------
-  // 2. ACCURATE CALENDAR STREAK ENGINE
+  // 2. CALENDAR STREAKS
   // -------------------------------------------------------------
   function getTodayString() {
     return new Date().toISOString().split("T")[0];
@@ -890,7 +940,7 @@
   }
 
   // -------------------------------------------------------------
-  // 9. CLASSORE LEADERBOARD, REFRESH BUTTON, & VERIFIED BADGES
+  // 9. CLASSORE LEADERBOARD & INTERACTIVE PROFILE / EDIT MODAL
   // -------------------------------------------------------------
   let currentLeague = "weekly";
   let cachedLeaderboardUsers = [];
@@ -905,11 +955,11 @@
       });
     });
 
-    // Inject the Refresh Button into the Ranking tab if not present
-    let refreshBtn = $("#btnRefreshLeaderboard");
-    if (!refreshBtn) {
-      const filterBar = $(".classore-filter-bar");
-      if (filterBar) {
+    const filterBar = $(".classore-filter-bar");
+    if (filterBar) {
+      // 1. Refresh Button
+      let refreshBtn = $("#btnRefreshLeaderboard");
+      if (!refreshBtn) {
         refreshBtn = document.createElement("button");
         refreshBtn.id = "btnRefreshLeaderboard";
         refreshBtn.type = "button";
@@ -932,9 +982,29 @@
             if (icon) icon.classList.remove("spin-clockwise");
           }, 650);
         });
-
-        lucide.createIcons();
       }
+
+      // 2. Admin Broadcast Button (Only visible to gethminahalangoda@gmail.com)
+      let broadcastBtn = $("#btnAdminBroadcast");
+      if (state.user.isAdmin && !broadcastBtn) {
+        broadcastBtn = document.createElement("button");
+        broadcastBtn.id = "btnAdminBroadcast";
+        broadcastBtn.type = "button";
+        broadcastBtn.className = "admin-topbar-broadcast-btn";
+        broadcastBtn.title = "Admin: Send In-App Notification Broadcast";
+        broadcastBtn.innerHTML = `<span>📢 Broadcast</span>`;
+        broadcastBtn.addEventListener("click", () => {
+          openNotificationComposerModal(null); // Global
+        });
+
+        const authContainer = $("#authContainer");
+        if (authContainer) {
+          filterBar.insertBefore(broadcastBtn, authContainer);
+        } else {
+          filterBar.appendChild(broadcastBtn);
+        }
+      }
+      lucide.createIcons();
     }
   }
 
@@ -969,29 +1039,6 @@
       return user.weeklyPoints ?? user.points ?? user.allTimePoints ?? 0;
     }
   }
-
-  // Admin capability: toggle verified status for users
-  window.toggleUserVerifiedStatus = async function(targetUid, newStatus) {
-    if (!state.user.isAdmin) {
-      alert("Only the super admin has access to grant verified status.");
-      return;
-    }
-    if (!window.firebase || !firebase.apps.length) return;
-    const db = firebase.firestore();
-
-    try {
-      await db.collection("users").doc(targetUid).set({
-        isPremium: newStatus
-      }, { merge: true });
-
-      const target = cachedLeaderboardUsers.find(u => u.uid === targetUid);
-      if (target) target.isPremium = newStatus;
-      renderClassoreLeaderboard();
-      console.log(`[MORROW ADMIN] Set verified status = ${newStatus} for user ${targetUid}`);
-    } catch (err) {
-      console.error("Error setting verified status:", err);
-    }
-  };
 
   function renderClassoreLeaderboard() {
     const listEl = $("#classoreLeaderboardRows");
@@ -1050,18 +1097,6 @@
       else if (rank === 2) rankHtml = `<span class="badge-silver">★ 2</span>`;
       else if (rank === 3) rankHtml = `<span class="badge-bronze">★ 3</span>`;
 
-      // Admin toggle button (visible exclusively to gethminahalangoda@gmail.com)
-      let adminToggleHtml = "";
-      if (state.user.isAdmin && !isMe) {
-        adminToggleHtml = `
-          <button class="admin-premium-toggle ${userIsVerified ? 'active' : ''}" 
-                  onclick="event.stopPropagation(); window.toggleUserVerifiedStatus('${user.uid}', ${!userIsVerified})" 
-                  title="Super Admin: Toggle Verified Badge">
-            ${userIsVerified ? 'Revoke ★' : 'Grant ★'}
-          </button>
-        `;
-      }
-
       row.innerHTML = `
         <div class="row-user-info">
           <div class="rank-badge-wrap">${rankHtml}</div>
@@ -1070,13 +1105,17 @@
             <div class="user-name-title">
               <span>${user.displayName || "Scholar"} ${isMe ? "(You)" : ""}</span>
               ${getVerifiedBadgeHtml(userIsVerified)}
-              ${adminToggleHtml}
             </div>
             <div class="user-sub-location">${user.bio || "Scholar"}</div>
           </div>
         </div>
         <div class="points-pill">• ${userPts} Pts</div>
       `;
+
+      // Clicking any user profile opens the profile view / admin stat editor
+      row.addEventListener("click", () => {
+        openScholarProfileModal(user);
+      });
 
       listEl.appendChild(row);
       renderAvatar($(`#classoreRowAv_${rank}`), user, "38px");
@@ -1114,13 +1153,295 @@
     }
   }
 
-  // Manual Leaderboard Data Refresh (bypasses local cache, pulls directly from server)
+  // -------------------------------------------------------------
+  // 10. SCHOLAR PROFILE & ADMIN STAT EDITOR MODAL
+  // -------------------------------------------------------------
+  function openScholarProfileModal(user) {
+    const isMe = user.uid === state.user.uid;
+    const isOwner = isSuperAdmin(state.user.email);
+    const verified = isUserPremium(user);
+    const weeklyPts = user.weeklyPoints ?? user.points ?? 0;
+    const weeklyHours = user.weeklyHours ?? ((user.totalStudyTime || 0) / 60) ?? 0;
+    const streak = user.streak ?? 0;
+
+    let adminFormHtml = "";
+    if (isOwner) {
+      adminFormHtml = `
+        <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line-strong);">
+          <div style="font-size: 0.8rem; font-weight: 800; color: #24A1DE; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <span>👑 ADMIN STAT EDITOR</span>
+            <span>${user.email || user.uid}</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="admin-modal-field">
+              <label>Weekly Points</label>
+              <input type="number" id="admEditPoints" value="${weeklyPts}">
+            </div>
+            <div class="admin-modal-field">
+              <label>Weekly Hours</label>
+              <input type="number" step="0.1" id="admEditHours" value="${weeklyHours.toFixed(1)}">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="admin-modal-field">
+              <label>Streak (Days)</label>
+              <input type="number" id="admEditStreak" value="${streak}">
+            </div>
+            <div class="admin-modal-field">
+              <label>Verified / Premium</label>
+              <select id="admEditVerified">
+                <option value="true" ${verified ? 'selected' : ''}>Verified (Blue Badge)</option>
+                <option value="false" ${!verified ? 'selected' : ''}>Standard</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button type="button" class="btn" id="admBtnSaveUser" style="flex: 1; padding: 10px;">Save Changes</button>
+            <button type="button" class="btn ghost" id="admBtnSendDM" style="padding: 10px;">💬 Message</button>
+          </div>
+        </div>
+      `;
+    }
+
+    const modalContent = `
+      <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+        <div class="profile-card-avatar" style="width: 64px; height: 64px; margin-bottom: 8px;" id="modalAvatarBox"></div>
+        <h3 style="margin: 0; font-size: 1.25rem;">
+          ${user.displayName || "Scholar"}
+          ${getVerifiedBadgeHtml(verified)}
+        </h3>
+        <p style="color: var(--muted); font-size: 0.85rem; margin: 4px 0 16px;">${user.bio || "Scholar of Morrow"}</p>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%;">
+          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
+            <div style="font-size: 0.75rem; color: var(--muted);">Points</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #10b981;">${weeklyPts}</div>
+          </div>
+          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
+            <div style="font-size: 0.75rem; color: var(--muted);">Focus</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--accent);">${weeklyHours.toFixed(1)}h</div>
+          </div>
+          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
+            <div style="font-size: 0.75rem; color: var(--muted);">Streak</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: var(--flame);">${streak}d</div>
+          </div>
+        </div>
+
+        ${adminFormHtml}
+      </div>
+    `;
+
+    showModal("Scholar Profile", modalContent, [
+      { label: "Close", primary: false, action: closeModal }
+    ], true);
+
+    renderAvatar($("#modalAvatarBox"), user, "64px");
+
+    // Admin save handler
+    if (isOwner) {
+      const btnSave = $("#admBtnSaveUser");
+      if (btnSave) {
+        btnSave.addEventListener("click", async () => {
+          const newPts = parseInt($("#admEditPoints").value) || 0;
+          const newHrs = parseFloat($("#admEditHours").value) || 0;
+          const newStreak = parseInt($("#admEditStreak").value) || 0;
+          const newVerified = $("#admEditVerified").value === "true";
+
+          btnSave.textContent = "Saving...";
+          const db = firebase.firestore();
+
+          try {
+            await db.collection("users").doc(user.uid).set({
+              points: newPts,
+              weeklyPoints: newPts,
+              allTimePoints: newPts,
+              dailyPoints: newPts,
+              weeklyHours: newHrs,
+              totalStudyTime: Math.round(newHrs * 60),
+              totalSeconds: Math.round(newHrs * 3600),
+              streak: newStreak,
+              isPremium: newVerified,
+              lastActive: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            // If editing current logged in user
+            if (isMe) {
+              state.stats.weeklyPoints = newPts;
+              state.stats.weekSeconds = Math.round(newHrs * 3600);
+              state.streak.count = newStreak;
+              state.user.isPremium = newVerified;
+              saveLocalState();
+            }
+
+            // Update in local cache
+            const target = cachedLeaderboardUsers.find(u => u.uid === user.uid);
+            if (target) {
+              target.points = newPts;
+              target.weeklyPoints = newPts;
+              target.weeklyHours = newHrs;
+              target.streak = newStreak;
+              target.isPremium = newVerified;
+            }
+
+            renderClassoreLeaderboard();
+            closeModal();
+            showInAppToast("Admin Notice", `Successfully updated stats for ${user.displayName || "user"}!`);
+          } catch (err) {
+            console.error("Admin update error:", err);
+            alert("Error saving: check Firestore security rules to allow admin writes.");
+            btnSave.textContent = "Save Changes";
+          }
+        });
+      }
+
+      const btnDM = $("#admBtnSendDM");
+      if (btnDM) {
+        btnDM.addEventListener("click", () => {
+          closeModal();
+          openNotificationComposerModal(user);
+        });
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 11. NOTIFICATIONS COMPOSER (ADMIN BROADCAST & DIRECT)
+  // -------------------------------------------------------------
+  function openNotificationComposerModal(targetUser = null) {
+    if (!state.user.isAdmin) return;
+
+    const isGlobal = !targetUser;
+    const recipientLabel = isGlobal 
+      ? "📢 All Scholars (Global Broadcast)" 
+      : `👤 ${targetUser.displayName || "Scholar"} (${targetUser.email || targetUser.uid})`;
+
+    const modalContent = `
+      <div style="text-align: left;">
+        <div style="font-size: 0.8rem; font-weight: 700; color: #24A1DE; margin-bottom: 14px;">
+          RECIPIENT: ${recipientLabel}
+        </div>
+
+        <div class="admin-modal-field">
+          <label>Notification Title</label>
+          <input type="text" id="notifInputTitle" placeholder="e.g. Focus Sprint Announcement" maxlength="60" required>
+        </div>
+
+        <div class="admin-modal-field">
+          <label>Message Content</label>
+          <textarea id="notifInputMessage" rows="3" placeholder="Write your announcement or notice here..." maxlength="240" required></textarea>
+        </div>
+
+        <button type="button" class="btn" id="btnSubmitSendNotif" style="width: 100%; margin-top: 8px;">
+          Send Notification
+        </button>
+      </div>
+    `;
+
+    showModal(isGlobal ? "Broadcast to Website" : "Direct Message", modalContent, [
+      { label: "Cancel", primary: false, action: closeModal }
+    ], true);
+
+    const btnSubmit = $("#btnSubmitSendNotif");
+    if (btnSubmit) {
+      btnSubmit.addEventListener("click", async () => {
+        const title = $("#notifInputTitle").value.trim();
+        const message = $("#notifInputMessage").value.trim();
+        if (!title || !message) {
+          alert("Please fill in both the title and message.");
+          return;
+        }
+
+        btnSubmit.textContent = "Sending...";
+        const db = firebase.firestore();
+
+        try {
+          await db.collection("notifications").add({
+            title: title,
+            message: message,
+            targetUid: isGlobal ? "all" : targetUser.uid,
+            senderEmail: SUPER_ADMIN_EMAIL,
+            senderName: "Gethmina Halangoda (Admin)",
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+          closeModal();
+          showInAppToast("Notification Dispatched", isGlobal ? "Global announcement sent to all users!" : `Direct message delivered to ${targetUser.displayName}!`);
+        } catch (err) {
+          console.error("Notification dispatch error:", err);
+          alert("Could not dispatch notification. Make sure Firestore rules allow writes to the 'notifications' collection.");
+          btnSubmit.textContent = "Send Notification";
+        }
+      });
+    }
+  }
+
+  // Real-time listener for incoming notifications
+  function initRealtimeNotificationsListener() {
+    if (!window.firebase || !firebase.apps.length) return;
+    const db = firebase.firestore();
+
+    db.collection("notifications")
+      .orderBy("createdAt", "desc")
+      .limit(6)
+      .onSnapshot(snap => {
+        snap.docChanges().forEach(change => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            const notifId = change.doc.id;
+
+            // Check if notification is targeted to all or to current user
+            const isForMe = data.targetUid === "all" || (state.user.uid && data.targetUid === state.user.uid);
+            const hasSeen = localStorage.getItem("morrow_seen_notif_" + notifId);
+
+            if (isForMe && !hasSeen) {
+              localStorage.setItem("morrow_seen_notif_" + notifId, "true");
+              showInAppToast(data.title, data.message, data.senderName);
+            }
+          }
+        });
+      }, err => console.warn("Notifications listener:", err));
+  }
+
+  function showInAppToast(title, message, sender = "Admin Notice") {
+    const existing = $(".in-app-toast-alert");
+    if (existing) existing.remove();
+
+    const toast = document.createElement("div");
+    toast.className = "in-app-toast-alert";
+    toast.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 1rem;">🔔</span>
+          <strong style="font-size: 0.95rem; color: #24A1DE;">${title}</strong>
+        </div>
+        <button type="button" class="del-task-btn" style="padding: 2px;" id="btnToastDismiss">
+          <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+        </button>
+      </div>
+      <p style="margin: 0; font-size: 0.85rem; color: var(--ink); line-height: 1.4;">${message}</p>
+      <div style="margin-top: 6px; font-size: 0.72rem; color: var(--muted); text-align: right;">${sender}</div>
+    `;
+
+    document.body.appendChild(toast);
+    lucide.createIcons();
+
+    $("#btnToastDismiss").addEventListener("click", () => toast.remove());
+    setTimeout(() => {
+      if (toast.parentNode) toast.remove();
+    }, 9000);
+  }
+
+  // -------------------------------------------------------------
+  // 12. MANUAL LEADERBOARD REFRESH
+  // -------------------------------------------------------------
   async function forceRefreshLeaderboard() {
     if (!window.firebase || !firebase.apps.length) return;
     const db = firebase.firestore();
 
     try {
-      // Force read from server directly
       const snap = await db.collection("users").limit(50).get({ source: "server" });
       cachedLeaderboardUsers = [];
       snap.forEach(doc => {
@@ -1144,7 +1465,6 @@
       renderClassoreLeaderboard();
       console.log("[MORROW] Forced server refresh on leaderboard.");
     } catch (err) {
-      // Offline fallback
       const snap = await db.collection("users").limit(50).get();
       cachedLeaderboardUsers = [];
       snap.forEach(doc => {
@@ -1170,7 +1490,7 @@
   }
 
   // -------------------------------------------------------------
-  // 10. CLOUD-FIRST FIRESTORE HYDRATION & SYNC (Users Collection)
+  // 13. CLOUD-FIRST FIRESTORE HYDRATION & SYNC
   // -------------------------------------------------------------
   function setPresence(status) {
     state.user.presence = status;
@@ -1215,7 +1535,6 @@
     }
   }
 
-  // Download from Cloud FIRST on new device before saving
   async function hydrateUserFromCloud(uid) {
     if (!window.firebase || !firebase.apps.length || !uid) return;
     const db = firebase.firestore();
@@ -1250,7 +1569,6 @@
         if (cloud.bio) state.user.bio = cloud.bio;
         if (cloud.subjects && cloud.subjects.length) state.subjects = cloud.subjects;
 
-        // Verify premium status
         if (cloud.isPremium || isSuperAdmin(state.user.email)) {
           state.user.isPremium = true;
         }
@@ -1274,7 +1592,6 @@
     }
   }
 
-  // Live real-time listener for current user across devices
   function initUserLiveListener(uid) {
     const db = firebase.firestore();
     db.collection("users").doc(uid).onSnapshot(doc => {
@@ -1308,7 +1625,6 @@
     });
   }
 
-  // Real-time listener for the global leaderboard
   function initFirestoreRealtimeLeaderboard() {
     if (!window.firebase || !firebase.apps.length) {
       renderClassoreLeaderboard();
@@ -1362,7 +1678,6 @@
           state.user.avatar = user.photoURL;
         }
 
-        // Auto-grant special creator privileges
         if (isSuperAdmin(state.user.email)) {
           state.user.isAdmin = true;
           state.user.isPremium = true;
@@ -1376,6 +1691,8 @@
 
         renderUserProfile();
         initFirestoreRealtimeLeaderboard();
+        initRealtimeNotificationsListener();
+        initClassoreLeagues();
 
         await hydrateUserFromCloud(user.uid);
       } else {
@@ -1407,7 +1724,7 @@
   }
 
   // -------------------------------------------------------------
-  // 11. PREFERENCES & LOCAL AVATAR DRAG/DROP
+  // 14. PREFERENCES & LOCAL AVATAR DRAG/DROP
   // -------------------------------------------------------------
   function initPreferences() {
     renderUserProfile();
@@ -1518,17 +1835,21 @@
   }
 
   // -------------------------------------------------------------
-  // 12. CUSTOM IN-APP MODAL
+  // 15. CUSTOM IN-APP MODAL
   // -------------------------------------------------------------
   const modalEl = $("#customModal");
   const modalTitle = $("#modalTitle");
   const modalDesc = $("#modalDesc");
   const modalButtons = $("#modalButtons");
 
-  function showModal(title, desc, buttons = []) {
+  function showModal(title, descOrHtml, buttons = [], isHtml = false) {
     if (!modalEl) return;
     modalTitle.textContent = title;
-    modalDesc.textContent = desc;
+    if (isHtml) {
+      modalDesc.innerHTML = descOrHtml;
+    } else {
+      modalDesc.textContent = descOrHtml;
+    }
     modalButtons.innerHTML = "";
 
     buttons.forEach(b => {
@@ -1548,7 +1869,7 @@
   }
 
   // -------------------------------------------------------------
-  // 13. TABS NAVIGATION & INDICATORS
+  // 16. TABS NAVIGATION & INDICATORS
   // -------------------------------------------------------------
   const navIndicator = $("#navIndicator");
   const tabs = $$(".tab");
