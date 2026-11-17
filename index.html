@@ -440,7 +440,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
 
 /* ============================================================
-   PROGRESS TAB (Restored Column Bar Graph + Animations)
+   PROGRESS TAB (Exact Restored Column Bar Graph + Animations)
    ============================================================ */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; width: 100%; }
 .stat { padding: 18px 20px; }
@@ -451,26 +451,51 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
 .chart h2, .goal h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
 
-.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; width: 100%; }
-.col { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
+.bars {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: .78rem;
+  color: var(--muted);
+}
 .col .well {
   width: 100%;
-  height: 140px;
+  height: 150px;
   display: flex;
   align-items: flex-end;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
   border: 1px solid var(--line);
   padding: 2px;
 }
 .col i {
-  display: block; width: 100%; height: var(--h, 0%); border-radius: 6px;
-  background: var(--accent-mid); transform-origin: bottom;
-  animation: grow .55s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(var(--n, 0) * 45ms);
+  display: block;
+  width: 100%;
+  height: var(--h, 0%);
+  border-radius: 6px 6px 3px 3px;
+  background: var(--accent-mid);
+  transform-origin: bottom;
+  animation: grow .55s cubic-bezier(.2, .9, .3, 1) both;
+  animation-delay: calc(var(--n, 0) * 45ms);
 }
-.col.today i { background: var(--accent); }
-.col.today { color: var(--ink); font-weight: 600; }
-@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.col.today i {
+  background: var(--accent);
+}
+.col.today {
+  color: var(--ink);
+  font-weight: 600;
+}
+@keyframes grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
 
 .goal { padding: 22px; margin-top: 14px; width: 100%; }
 .goal-row { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: 10px; }
@@ -712,7 +737,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .modal-icon { width: 50px; height: 50px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin: 0 auto 16px; }
 
 /* ============================================================
-   RESPONSIVE MOBILE ENGINE (Fixes All Phone Squishing)
+   RESPONSIVE MOBILE ENGINE (Fixes Phone Squishing)
    ============================================================ */
 @media (max-width: 860px) {
   .classore-grid { grid-template-columns: 1fr; }
@@ -863,7 +888,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
     gap: 6px;
   }
   .col .well {
-    height: 110px;
+    height: 120px;
   }
 
   /* Ranking Mobile Tuning */
@@ -1097,7 +1122,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
       <p style="font-size: .84rem; color: var(--muted); margin-top: 14px;">Finished tasks are automatically cleared once your tab closes.</p>
     </section>
 
-    <!-- ---------- TAB 3: PROGRESS (Restored Column Bar Graph with Animations) ---------- -->
+    <!-- ---------- TAB 3: PROGRESS (Exact Column Bar Graph with Animations) ---------- -->
     <section class="panel" id="panel-progress" role="tabpanel" hidden>
       <div class="stats">
         <div class="stat card"><span>Focused today</span><strong id="statToday">0h 0m</strong></div>
@@ -1105,14 +1130,14 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
         <div class="stat card"><span>Total Points</span><strong id="statTotalPts">0 Pts</strong></div>
       </div>
 
-      <!-- Restored Column Bar Graph from Template -->
+      <!-- Animated Column Bar Graph -->
       <div class="chart card">
         <div class="chart-head">
           <h2>Focus time this week</h2>
           <span style="font-size: .85rem; color: var(--muted);" id="chartTotalBadge">0.0h total</span>
         </div>
         <div class="bars" id="weeklyBarsContainer">
-          <!-- Mon-Sun columns dynamically rendered with animated grow bars -->
+          <!-- Mon-Sun columns dynamically populated with staggered grow animation -->
         </div>
       </div>
 
@@ -1157,12 +1182,12 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
         </div>
       </div>
 
-      <!-- Subject Filters (Allows clicking back to "All Subjects") -->
+      <!-- Subject Filters -->
       <div class="classore-sub-filters" id="subjectFilterPills">
         <span class="sub-filter-item active" data-sub="all">All Subjects</span>
       </div>
 
-      <!-- 2-Column Classore Grid (Mobile-responsive) -->
+      <!-- 2-Column Classore Grid -->
       <div class="classore-grid">
         <div class="leaderboard-list" id="classoreLeaderboardRows">
           <div style="text-align: center; color: var(--muted); padding: 48px;">

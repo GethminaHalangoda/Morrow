@@ -1,6 +1,8 @@
 /**
  * MORROW — Firebase Authentication & Cloud Firestore Integration
- * Collection: 'users' (Keyed by Google account UID)
+ * Firestore Collection: 'users'
+ * Documents are keyed by the Google Account UID (e.g., users/{user.uid}).
+ * Existing user data is strictly protected and never overwritten.
  */
 
 const firebaseConfig = {
@@ -19,7 +21,6 @@ let isFirebaseInitialized = false;
 
 try {
   if (firebaseConfig.apiKey) {
-    // Prevent duplicate app initialization
     if (!firebase.apps.length) {
       firebase.initializeApp(firebaseConfig);
     }
@@ -31,7 +32,7 @@ try {
       console.warn("Firestore persistence notice:", err.code);
     });
 
-    // Keep users signed in locally across browser reopens
+    // Keep users signed in locally across browser sessions
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     isFirebaseInitialized = true;
     console.log("MORROW: Firebase initialized with 'users' collection.");
@@ -41,7 +42,7 @@ try {
 }
 
 // ---------------------------------------------------------------------------
-// AUTH STATE OBSERVER (Safe profile bootstrap — Never overwrites existing data)
+// AUTH STATE OBSERVER (Safe bootstrap: Never overwrites existing user data)
 // ---------------------------------------------------------------------------
 if (auth) {
   auth.onAuthStateChanged(async (user) => {
@@ -53,7 +54,7 @@ if (auth) {
         const docSnap = await userRef.get();
 
         if (!docSnap.exists) {
-          // Brand New User: create new document using Google account info
+          // Brand new user: create their document under their Google account UID
           await userRef.set({
             uid: userId,
             email: user.email || "",
@@ -73,9 +74,10 @@ if (auth) {
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             lastActive: firebase.firestore.FieldValue.serverTimestamp()
           });
-          console.log(`[MORROW] Created new user document in 'users/${userId}'`);
+          console.log(`[MORROW] Created new scholar document in 'users/${userId}'`);
         } else {
-          // Existing User: DO NOT touch points, streak, or stats! Only bump lastActive
+          // Existing user (e.g. your existing document in 'users'):
+          // DO NOT touch points, streak, or stats! Only update presence & lastActive
           await userRef.set({
             email: user.email || "",
             lastActive: firebase.firestore.FieldValue.serverTimestamp(),
@@ -93,7 +95,7 @@ if (auth) {
 }
 
 // ---------------------------------------------------------------------------
-// GLOBAL METHODS EXPOSED FOR APP.JS
+// GLOBAL HELPER METHODS
 // ---------------------------------------------------------------------------
 
 // 1. Google Authentication Popup
@@ -122,7 +124,7 @@ window.signOutUser = async function() {
   }
 };
 
-// 3. Save / Sync Study Session (Uses atomic increment and merge: true)
+// 3. Save / Sync Study Session (Atomic increment, strictly merges without overwriting)
 window.recordStudySession = async function(sessionMinutes, earnedPoints) {
   if (!isFirebaseInitialized || !db || !auth.currentUser) {
     console.warn("Cannot record session: No authenticated user.");
@@ -150,7 +152,7 @@ window.recordStudySession = async function(sessionMinutes, earnedPoints) {
   }
 };
 
-// 4. Update Profile Details (Without overwriting stats)
+// 4. Update Profile Details (Non-destructive merge)
 window.updateUserProfile = async function(profileData) {
   if (!isFirebaseInitialized || !db || !auth.currentUser) return;
   const userId = auth.currentUser.uid;
@@ -162,13 +164,12 @@ window.updateUserProfile = async function(profileData) {
       bio: profileData.bio || "",
       lastActive: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
-    console.log("[MORROW] User profile successfully merged.");
   } catch (err) {
     console.error("Error updating user profile:", err);
   }
 };
 
-// 5. Update Presence (online / studying / offline)
+// 5. Update Presence Status (online / studying / offline)
 window.updateCloudPresence = async function(status) {
   if (!isFirebaseInitialized || !db || !auth.currentUser) return;
   const userId = auth.currentUser.uid;
