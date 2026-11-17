@@ -1,6 +1,7 @@
 /**
- * MORROW — Deep Focus Engine & Leaderboard
- * Points Formula, Anti-Cheat Check-ins, Locked Subjects, and Classore Rankings
+ * MORROW — Deep Focus Engine
+ * Includes: True Background & Lock-Screen Timer, Accurate Streak Tracking,
+ * Multi-device Cloud Firestore Sync, Classore Leaderboard, and Restored Bar Graph.
  */
 
 (() => {
@@ -10,9 +11,9 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   // -------------------------------------------------------------
-  // 1. STATE & ZERO DEMO DATA
+  // 1. STATE & STORAGE
   // -------------------------------------------------------------
-  const STORAGE_KEY = "MORROW_STATE_V4";
+  const STORAGE_KEY = "MORROW_STATE_V5";
 
   const defaultState = {
     user: {
@@ -34,7 +35,7 @@
     streak: {
       count: 0,
       lastStudyDate: null,
-      weekDaysDone: []
+      weekDaysDone: [] // ['Mon', 'Tue', ...]
     },
     stats: {
       todaySeconds: 0,
@@ -51,10 +52,8 @@
   let state = loadLocalState();
   let sessionTasks = JSON.parse(sessionStorage.getItem("MORROW_SESSION_TASKS") || "[]");
 
-  // Real-time unverified session tracker (Post-session claim window)
   let pendingSession = {
     seconds: 0,
-    subjectId: null,
     isCompletedPomo: false,
     timestampEnd: 0
   };
@@ -78,15 +77,326 @@
   }
 
   // -------------------------------------------------------------
-  // 2. MATHEMATICAL POINT CALCULATION FORMULA & ANTI-CHEAT
+  // 2. TRUE ACCURATE STREAK MECHANIC
   // -------------------------------------------------------------
-  /**
-   * Session Points = (Minutes * Base Rate) * Completion Bonus * Streak Multiplier
-   * Base rate: 10 pts/min
-   * Diminishing returns: drops to 2 pts/min after 8h in 24h window; hard-capped at 12h
-   * Completion bonus: 1.2x for finished pomodoros, 1.0x otherwise
-   * Streak multiplier: 1.0x up to 1.5x (+0.1x per qualifying day)
-   */
+  function getTodayString() {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  function getYesterdayString() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split("T")[0];
+  }
+
+  function checkDayRoll() {
+    const today = getTodayString();
+    const yesterday = getYesterdayString();
+
+    if (state.stats.lastRecordedDate !== today) {
+      // Check streak break
+      if (state.streak.lastStudyDate && state.streak.lastStudyDate !== yesterday && state.streak.lastStudyDate !== today) {
+        state.streak.count = 0;
+      }
+
+      state.stats.todaySeconds = 0;
+      state.stats.dailyPoints = 0;
+      state.stats.lastRecordedDate = today;
+
+      // Reset week on Monday
+      if (new Date().getDay() === 1) {
+        state.stats.weekSeconds = 0;
+        state.stats.weeklyPoints = 0;
+        state.stats.weeklyDays = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+        state.streak.weekDaysDone = [];
+      }
+      saveLocalState();
+    }
+  }
+
+  function markStreakToday() {
+    const today = getTodayString();
+    const yesterday = getYesterdayString();
+    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
+
+    if (state.streak.lastStudyDate !== today) {
+      if (state.streak.lastStudyDate === yesterday) {
+        state.streak.count += 1;
+      } else {
+        state.streak.count = 1;
+      }
+      state.streak.lastStudyDate = today;
+
+      if (!state.streak.weekDaysDone.includes(dayName)) {
+        state.streak.weekDaysDone.push(dayName);
+      }
+      saveLocalState();
+      renderStreakWeek();
+    }
+  }
+
+  function renderStreakWeek() {
+    const c = state.streak.count;
+    $("#sideStreakNum").textContent = c;
+    $("#topStreakText").textContent = `${c} day streak`;
+    $("#streakHeadTitle").textContent = `${c} day streak`;
+
+    const container = $("#weekDaysContainer");
+    container.innerHTML = "";
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const currentDayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
+
+    days.forEach(d => {
+      const isDone = state.streak.weekDaysDone.includes(d);
+      const isToday = d === currentDayName;
+      const el = document.createElement("div");
+      el.className = `day ${isDone ? "done" : ""} ${isToday ? "today" : ""}`;
+      el.innerHTML = `
+        <span class="dot">
+          <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </span>
+        ${d}
+      `;
+      container.appendChild(el);
+    });
+  }
+
+  // -------------------------------------------------------------
+  // 3. BACKGROUND & LOCK SCREEN ACCURATE TIMER ENGINE
+  // -------------------------------------------------------------
+  let timerMode = "stopwatch"; // Stopwatch is default
+  let timerRunning = false;
+  let stopwatchSecs = 0;
+  let pomoRemaining = 25 * 60;
+  let activeSubId = state.subjects[0]?.id || "math";
+
+  let sessionStartTimestamp = 0;
+  let sessionBaseSeconds = 0;
+  let wakeLock = null;
+
+  // Background Web Worker
+  let timerWorker = null;
+  try {
+    const workerBlob = new Blob([`
+      let interval = null;
+      self.onmessage = function(e) {
+        if (e.data === 'start') {
+          if (interval) clearInterval(interval);
+          interval = setInterval(() => self.postMessage('tick'), 1000);
+        } else if (e.data === 'stop') {
+          if (interval) clearInterval(interval);
+          interval = null;
+        }
+      };
+    `], { type: 'application/javascript' });
+    timerWorker = new Worker(URL.createObjectURL(workerBlob));
+    timerWorker.onmessage = () => {
+      if (timerRunning) onTimerTick();
+    };
+  } catch (err) {
+    console.warn("Web worker fallback enabled.");
+  }
+
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+      }
+    } catch (e) {}
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+  }
+
+  const ringProgress = $("#ringProgress");
+  const C = 2 * Math.PI * 100;
+  ringProgress.style.strokeDasharray = C.toFixed(2);
+
+  function setSubjectLock(locked) {
+    const bar = $("#subjectsBar");
+    const hint = $("#subjectLockHint");
+    if (locked) {
+      bar.classList.add("timer-locked");
+      hint.classList.add("visible");
+    } else {
+      bar.classList.remove("timer-locked");
+      hint.classList.remove("visible");
+    }
+  }
+
+  function initTimer() {
+    renderSubjectsBar();
+    updateTimerDisplay();
+
+    $$("#seg button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (timerRunning) return;
+        $$("#seg button").forEach(b => b.setAttribute("aria-pressed", "false"));
+        btn.setAttribute("aria-pressed", "true");
+        timerMode = btn.dataset.mode;
+        placeIndicator($("#segIndicator"), btn);
+        resetTimer();
+      });
+    });
+
+    $("#startBtn").addEventListener("click", () => {
+      if (timerRunning) {
+        pauseTimer();
+      } else {
+        // Enforce Sign In modal requirement
+        if (!state.user.uid) {
+          showModal(
+            "Sign in to start focusing",
+            "Please sign in with your Google account to record study time, keep your streak alive, and sync your points.",
+            [
+              {
+                label: "Sign In with Google",
+                primary: true,
+                action: () => {
+                  closeModal();
+                  triggerGoogleSignIn();
+                }
+              },
+              { label: "Cancel", primary: false, action: closeModal }
+            ]
+          );
+          return;
+        }
+        startTimer();
+      }
+    });
+
+    $("#resetBtn").addEventListener("click", resetTimer);
+
+    $("#saveSessionBtn").addEventListener("click", () => {
+      if (timerRunning) pauseTimer();
+      commitSessionVerification();
+    });
+
+    $("#claimPointsActionBtn").addEventListener("click", commitSessionVerification);
+    $("#topClaimPointsBtn").addEventListener("click", commitSessionVerification);
+
+    $("#topicInput").addEventListener("input", e => {
+      $("#activeTopicTag").textContent = e.target.value.trim() || "No topic selected";
+    });
+  }
+
+  function startTimer() {
+    timerRunning = true;
+    setSubjectLock(true);
+    $("#startBtnLabel").textContent = "Pause";
+    $("#ringWrap").classList.add("running");
+    $("#timerStatus").textContent = timerMode === "stopwatch" ? "Tracking Focus" : "Pomodoro Active";
+    setPresence("studying");
+
+    sessionStartTimestamp = Date.now();
+    sessionBaseSeconds = timerMode === "stopwatch" ? stopwatchSecs : pomoRemaining;
+
+    requestWakeLock();
+    if (timerWorker) timerWorker.postMessage('start');
+  }
+
+  function pauseTimer() {
+    timerRunning = false;
+    setSubjectLock(false);
+    if (timerWorker) timerWorker.postMessage('stop');
+    releaseWakeLock();
+
+    $("#startBtnLabel").textContent = "Resume";
+    $("#ringWrap").classList.remove("running");
+    $("#timerStatus").textContent = "Paused";
+    setPresence("online");
+
+    if (pendingSession.seconds >= 30) {
+      promptPendingPointsCard();
+    }
+  }
+
+  function resetTimer() {
+    pauseTimer();
+    stopwatchSecs = 0;
+    pomoRemaining = 25 * 60;
+    pendingSession.seconds = 0;
+    $("#pendingSessionCard").classList.remove("visible");
+    $("#topClaimPointsBtn").style.display = "none";
+    $("#startBtnLabel").textContent = "Start";
+    $("#timerStatus").textContent = "Ready";
+    updateTimerDisplay();
+  }
+
+  // Delta calculation ensures 100% precision even after the phone is locked
+  function onTimerTick() {
+    const elapsed = Math.floor((Date.now() - sessionStartTimestamp) / 1000);
+
+    if (timerMode === "stopwatch") {
+      stopwatchSecs = sessionBaseSeconds + elapsed;
+      pendingSession.seconds = elapsed;
+    } else {
+      pomoRemaining = Math.max(0, sessionBaseSeconds - elapsed);
+      pendingSession.seconds = elapsed;
+
+      if (pomoRemaining === 0) {
+        pendingSession.isCompletedPomo = true;
+        pauseTimer();
+        pomoRemaining = 25 * 60;
+        commitSessionVerification();
+        return;
+      }
+    }
+
+    // Every minute: record persistent focus
+    if (elapsed > 0 && elapsed % 60 === 0) {
+      recordFocusMinute();
+    }
+
+    updateTimerDisplay();
+  }
+
+  // Recalculate accurately whenever the user turns on the screen or switches tabs
+  document.addEventListener("visibilitychange", () => {
+    if (timerRunning) {
+      onTimerTick();
+    }
+  });
+
+  function updateTimerDisplay() {
+    const s = timerMode === "stopwatch" ? stopwatchSecs : pomoRemaining;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    $("#timeDigits").textContent = `${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
+
+    if (timerMode === "stopwatch") {
+      const f = (stopwatchSecs % 3600) / 3600;
+      ringProgress.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
+    } else {
+      const f = pomoRemaining / (25 * 60);
+      ringProgress.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
+    }
+  }
+
+  function recordFocusMinute() {
+    checkDayRoll();
+    state.stats.todaySeconds += 60;
+    state.stats.weekSeconds += 60;
+    state.stats.totalSeconds += 60;
+
+    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
+    if (state.stats.weeklyDays[dayName] !== undefined) {
+      state.stats.weeklyDays[dayName] += 60;
+    }
+
+    // 15 minutes studied marks streak
+    if (state.stats.todaySeconds >= 900) {
+      markStreakToday();
+    }
+    saveLocalState();
+  }
+
+  // Point Calculation: (Minutes * Base Rate) * Completion Bonus * Streak Multiplier
   function calculateSessionPoints(minutes, isCompletedPomo) {
     if (minutes <= 0) return 0;
     const todayMinsBefore = Math.floor(state.stats.todaySeconds / 60);
@@ -99,7 +409,7 @@
       } else if (minToday < 720) { // 8 - 12 hours
         basePoints += 2;
       } else {
-        basePoints += 0; // Hard cap after 12 hours
+        basePoints += 0; // Hard cap
       }
     }
 
@@ -109,8 +419,51 @@
     return Math.round(basePoints * completionBonus * streakMult);
   }
 
+  function promptPendingPointsCard() {
+    const mins = Math.max(1, Math.round(pendingSession.seconds / 60));
+    const pts = calculateSessionPoints(mins, pendingSession.isCompletedPomo);
+    $("#pendingSessionDetails").textContent = `${mins}m focused (+${pts} pts) • Claim within 5m`;
+    $("#pendingSessionCard").classList.add("visible");
+    $("#topClaimPointsBtn").style.display = "inline-flex";
+    pendingSession.timestampEnd = Date.now();
+  }
+
+  function commitSessionVerification() {
+    if (pendingSession.seconds < 15) {
+      showModal("Session Too Short", "Study at least 1 minute to earn verified points.", [
+        { label: "OK", action: closeModal }
+      ]);
+      return;
+    }
+
+    if (pendingSession.timestampEnd && (Date.now() - pendingSession.timestampEnd) > 5 * 60 * 1000) {
+      showModal("Session Expired", "Points unverified because the 5-minute claim window lapsed.", [
+        { label: "Close", action: closeModal }
+      ]);
+      resetTimer();
+      return;
+    }
+
+    const minutes = Math.max(1, Math.round(pendingSession.seconds / 60));
+    const earnedPoints = calculateSessionPoints(minutes, pendingSession.isCompletedPomo);
+
+    state.stats.dailyPoints += earnedPoints;
+    state.stats.weeklyPoints += earnedPoints;
+    state.stats.allTimePoints += earnedPoints;
+
+    saveLocalState();
+    resetTimer();
+
+    showModal("Points Claimed!", `You earned +${earnedPoints} pts! Your global ranking is updated.`, [
+      { label: "Awesome", action: closeModal }
+    ]);
+
+    renderProgressTab();
+    renderClassoreLeaderboard();
+  }
+
   // -------------------------------------------------------------
-  // 3. COLOR TOKENS & THEMING
+  // 4. COLOR TRANSITIONS & THEMING
   // -------------------------------------------------------------
   const hexToRgb = h => {
     const n = parseInt(h.slice(1), 16);
@@ -142,7 +495,7 @@
   }
 
   // -------------------------------------------------------------
-  // 4. AUDIO WAVE ANIMATION
+  // 5. AUDIO WAVE VISUALIZER
   // -------------------------------------------------------------
   const waveCanvas = $("#waveCanvas");
   const waveCtx = waveCanvas.getContext("2d");
@@ -184,289 +537,18 @@
   }
 
   // -------------------------------------------------------------
-  // 5. TIMER ENGINE & SUBJECT LOCKING
+  // 6. SUBJECTS (Managed strictly in Preferences)
   // -------------------------------------------------------------
-  let timerMode = "stopwatch"; // Stopwatch is default
-  let timerRunning = false;
-  let timerInterval = null;
-  let stopwatchSecs = 0;
-  let pomoRemaining = 25 * 60;
-  let activeSubId = state.subjects[0]?.id || "math";
-  let heartbeatCount = 0;
+  let currentSubjectFilter = "all";
 
-  const ringProgress = $("#ringProgress");
-  const C = 2 * Math.PI * 100;
-  ringProgress.style.strokeDasharray = C.toFixed(2);
-
-  function setSubjectLock(locked) {
-    const bar = $("#subjectsBar");
-    const hint = $("#subjectLockHint");
-    if (locked) {
-      bar.classList.add("timer-locked");
-      hint.classList.add("visible");
-    } else {
-      bar.classList.remove("timer-locked");
-      hint.classList.remove("visible");
-    }
-  }
-
-  function initTimer() {
-    renderSubjectsBar();
-    updateTimerDisplay();
-
-    // Mode Toggle
-    $$("#seg button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        if (timerRunning) return;
-        $$("#seg button").forEach(b => b.setAttribute("aria-pressed", "false"));
-        btn.setAttribute("aria-pressed", "true");
-        timerMode = btn.dataset.mode;
-        placeIndicator($("#segIndicator"), btn);
-        resetTimer();
-      });
-    });
-
-    $("#startBtn").addEventListener("click", () => {
-      if (timerRunning) pauseTimer();
-      else startTimer();
-    });
-
-    $("#resetBtn").addEventListener("click", resetTimer);
-
-    // Explicit Save Session button
-    $("#saveSessionBtn").addEventListener("click", () => {
-      if (timerRunning) pauseTimer();
-      commitSessionVerification();
-    });
-
-    // Claim points button in notification card
-    $("#claimPointsActionBtn").addEventListener("click", () => {
-      commitSessionVerification();
-    });
-    $("#topClaimPointsBtn").addEventListener("click", () => {
-      commitSessionVerification();
-    });
-
-    $("#topicInput").addEventListener("input", e => {
-      const v = e.target.value.trim();
-      $("#activeTopicTag").textContent = v || "No topic selected";
-    });
-  }
-
-  function startTimer() {
-    timerRunning = true;
-    setSubjectLock(true); // Lock subjects while timer is running
-    $("#startBtnLabel").textContent = "Pause";
-    $("#ringWrap").classList.add("running");
-    $("#timerStatus").textContent = timerMode === "stopwatch" ? "Tracking Focus" : "Pomodoro Active";
-    setPresence("studying");
-
-    timerInterval = setInterval(() => {
-      if (timerMode === "stopwatch") {
-        stopwatchSecs++;
-        pendingSession.seconds++;
-      } else {
-        if (pomoRemaining > 0) {
-          pomoRemaining--;
-          pendingSession.seconds++;
-        } else {
-          // Completed full Pomodoro
-          pendingSession.isCompletedPomo = true;
-          pauseTimer();
-          pomoRemaining = 25 * 60;
-          commitSessionVerification();
-          return;
-        }
-      }
-
-      // Heartbeat validation (every 60 seconds of focused study)
-      heartbeatCount++;
-      if (heartbeatCount >= 60) {
-        heartbeatCount = 0;
-        recordHeartbeatMinute();
-      }
-
-      updateTimerDisplay();
-    }, 1000);
-  }
-
-  function pauseTimer() {
-    timerRunning = false;
-    setSubjectLock(false); // Re-allow switching subjects
-    clearInterval(timerInterval);
-    $("#startBtnLabel").textContent = "Resume";
-    $("#ringWrap").classList.remove("running");
-    $("#timerStatus").textContent = "Paused";
-    setPresence("online");
-
-    if (pendingSession.seconds >= 30) {
-      promptPendingPointsCard();
-    }
-  }
-
-  function resetTimer() {
-    pauseTimer();
-    stopwatchSecs = 0;
-    pomoRemaining = 25 * 60;
-    pendingSession.seconds = 0;
-    $("#pendingSessionCard").classList.remove("visible");
-    $("#topClaimPointsBtn").style.display = "none";
-    $("#startBtnLabel").textContent = "Start";
-    $("#timerStatus").textContent = "Ready";
-    updateTimerDisplay();
-  }
-
-  function updateTimerDisplay() {
-    const s = timerMode === "stopwatch" ? stopwatchSecs : pomoRemaining;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    $("#timeDigits").textContent = `${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
-
-    if (timerMode === "stopwatch") {
-      const f = (stopwatchSecs % 3600) / 3600;
-      ringProgress.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
-    } else {
-      const f = pomoRemaining / (25 * 60);
-      ringProgress.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
-    }
-  }
-
-  function recordHeartbeatMinute() {
-    checkDayRoll();
-    state.stats.todaySeconds += 60;
-    state.stats.weekSeconds += 60;
-    state.stats.totalSeconds += 60;
-
-    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
-    if (state.stats.weeklyDays[dayName] !== undefined) {
-      state.stats.weeklyDays[dayName] += 60;
-    }
-
-    if (state.stats.todaySeconds >= 1800) {
-      markStreakToday();
-    }
-    saveLocalState();
-  }
-
-  function promptPendingPointsCard() {
-    const mins = Math.max(1, Math.round(pendingSession.seconds / 60));
-    const pts = calculateSessionPoints(mins, pendingSession.isCompletedPomo);
-    $("#pendingSessionDetails").textContent = `${mins}m focused (+${pts} pts) • Claim within 5m`;
-    $("#pendingSessionCard").classList.add("visible");
-    $("#topClaimPointsBtn").style.display = "inline-flex";
-    pendingSession.timestampEnd = Date.now();
-  }
-
-  // Post-Session Check-in verification
-  function commitSessionVerification() {
-    if (pendingSession.seconds < 15) {
-      showModal("Session Too Short", "Focus for at least 1 minute to earn verified leaderboard points.", [
-        { label: "OK", action: closeModal }
-      ]);
-      return;
-    }
-
-    // 5-minute timeout guardrail check
-    if (pendingSession.timestampEnd && (Date.now() - pendingSession.timestampEnd) > 5 * 60 * 1000) {
-      showModal("Session Expired", "Points unverified because post-session verification window (5 mins) lapsed.", [
-        { label: "Close", action: closeModal }
-      ]);
-      resetTimer();
-      return;
-    }
-
-    const minutes = Math.max(1, Math.round(pendingSession.seconds / 60));
-    const earnedPoints = calculateSessionPoints(minutes, pendingSession.isCompletedPomo);
-
-    state.stats.dailyPoints += earnedPoints;
-    state.stats.weeklyPoints += earnedPoints;
-    state.stats.allTimePoints += earnedPoints;
-
-    saveLocalState();
-    resetTimer();
-
-    showModal("Points Claimed!", `You earned +${earnedPoints} pts! Your global standing has updated.`, [
-      { label: "Great!", action: closeModal }
-    ]);
-
-    renderProgressTab();
-    renderClassoreLeaderboard();
-  }
-
-  // -------------------------------------------------------------
-  // 6. STREAKS
-  // -------------------------------------------------------------
-  function checkDayRoll() {
-    const today = new Date().toISOString().split("T")[0];
-    if (state.stats.lastRecordedDate !== today) {
-      state.stats.todaySeconds = 0;
-      state.stats.dailyPoints = 0;
-      state.stats.lastRecordedDate = today;
-
-      if (new Date().getDay() === 1) { // Reset Monday
-        state.stats.weekSeconds = 0;
-        state.stats.weeklyPoints = 0;
-        state.stats.weeklyDays = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
-        state.streak.weekDaysDone = [];
-      }
-      saveLocalState();
-    }
-  }
-
-  function markStreakToday() {
-    const today = new Date().toISOString().split("T")[0];
-    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
-
-    if (state.streak.lastStudyDate !== today) {
-      state.streak.count++;
-      state.streak.lastStudyDate = today;
-      if (!state.streak.weekDaysDone.includes(dayName)) {
-        state.streak.weekDaysDone.push(dayName);
-      }
-      saveLocalState();
-      renderStreakWeek();
-    }
-  }
-
-  function renderStreakWeek() {
-    const c = state.streak.count;
-    $("#sideStreakNum").textContent = c;
-    $("#topStreakText").textContent = `${c} day streak`;
-    $("#streakHeadTitle").textContent = `${c} day streak`;
-
-    const container = $("#weekDaysContainer");
-    container.innerHTML = "";
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const currentDayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
-
-    days.forEach(d => {
-      const isDone = state.streak.weekDaysDone.includes(d);
-      const isToday = d === currentDayName;
-      const el = document.createElement("div");
-      el.className = `day ${isDone ? "done" : ""} ${isToday ? "today" : ""}`;
-      el.innerHTML = `
-        <span class="dot">
-          <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-        </span>
-        ${d}
-      `;
-      container.appendChild(el);
-    });
-  }
-
-  // -------------------------------------------------------------
-  // 7. SUBJECTS (No symbols, managed in Preferences)
-  // -------------------------------------------------------------
   function renderSubjectsBar() {
     const bar = $("#subjectsBar");
     const taskSelect = $("#taskSubSelect");
     const filterPills = $("#subjectFilterPills");
     bar.innerHTML = "";
     taskSelect.innerHTML = "";
-    filterPills.innerHTML = '<span class="sub-filter-item active" data-sub="all">All Subjects</span>';
 
     state.subjects.forEach(s => {
-      // Main chip
       const chip = document.createElement("span");
       chip.className = `chip ${s.id === activeSubId ? "on" : ""}`;
       chip.style.setProperty("--c", s.color);
@@ -478,9 +560,8 @@
       `;
 
       chip.querySelector("button").addEventListener("click", () => {
-        // Enforce subject lock when timer is running
         if (timerRunning) {
-          showModal("Timer Active", "Subject switching is locked while the timer is running. Pause or save the session first.", [
+          showModal("Timer Active", "Subject switching is locked during active focus. Pause or save the session first.", [
             { label: "Got it", action: closeModal }
           ]);
           return;
@@ -491,18 +572,33 @@
       });
       bar.appendChild(chip);
 
-      // Select in Tasks
       const opt = document.createElement("option");
       opt.value = s.id;
       opt.textContent = s.name;
       taskSelect.appendChild(opt);
+    });
 
-      // Filter in Classore Rankings
+    // Rebuild leaderboard filter pills with proper "All Subjects" click listener
+    filterPills.innerHTML = "";
+    const allPill = document.createElement("span");
+    allPill.className = `sub-filter-item ${currentSubjectFilter === "all" ? "active" : ""}`;
+    allPill.dataset.sub = "all";
+    allPill.textContent = "All Subjects";
+    allPill.addEventListener("click", () => {
+      currentSubjectFilter = "all";
+      $$(".sub-filter-item").forEach(p => p.classList.remove("active"));
+      allPill.classList.add("active");
+      renderClassoreLeaderboard();
+    });
+    filterPills.appendChild(allPill);
+
+    state.subjects.forEach(s => {
       const fp = document.createElement("span");
-      fp.className = "sub-filter-item";
+      fp.className = `sub-filter-item ${currentSubjectFilter === s.id ? "active" : ""}`;
       fp.dataset.sub = s.id;
       fp.textContent = s.name;
       fp.addEventListener("click", () => {
+        currentSubjectFilter = s.id;
         $$(".sub-filter-item").forEach(p => p.classList.remove("active"));
         fp.classList.add("active");
         renderClassoreLeaderboard();
@@ -559,7 +655,7 @@
   });
 
   // -------------------------------------------------------------
-  // 8. STUDY TASKS
+  // 7. STUDY TASKS
   // -------------------------------------------------------------
   function renderTasks() {
     const list = $("#taskList");
@@ -620,7 +716,7 @@
   window.addEventListener("pagehide", clearCompletedTasks);
 
   // -------------------------------------------------------------
-  // 9. PROGRESS TAB (Smooth Spline Wave Chart)
+  // 8. PROGRESS TAB (Restored Animated Bar Graph)
   // -------------------------------------------------------------
   function renderProgressTab() {
     const todayHrs = state.stats.todaySeconds / 3600;
@@ -637,59 +733,40 @@
     $("#goalPercent").textContent = `${pct}%`;
     $("#goalMeterBar").style.width = `${pct}%`;
 
-    renderSmoothLineChart();
+    renderRestoredBarGraph();
   }
 
-  function renderSmoothLineChart() {
+  function renderRestoredBarGraph() {
+    const container = $("#weeklyBarsContainer");
+    container.innerHTML = "";
+
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const currentDayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
+
     const vals = days.map(d => (state.stats.weeklyDays[d] || 0) / 3600);
-    const maxVal = Math.max(4, ...vals);
+    const maxVal = Math.max(3, ...vals); // Minimum scale 3 hours
 
-    const W = 600, H = 140, pad = 20;
-    const stepX = (W - pad * 2) / 6;
+    days.forEach((day, idx) => {
+      const h = vals[idx];
+      const percent = Math.min(100, Math.round((h / maxVal) * 100));
+      const isToday = day === currentDayName;
 
-    const points = vals.map((v, i) => {
-      const x = pad + i * stepX;
-      const y = H - (v / maxVal) * (H - 40) - 20;
-      return { x, y };
-    });
-
-    let pathD = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[i];
-      const p1 = points[i + 1];
-      const cx = (p0.x + p1.x) / 2;
-      pathD += ` C ${cx} ${p0.y}, ${cx} ${p1.y}, ${p1.x} ${p1.y}`;
-    }
-
-    $("#chartLinePath").setAttribute("d", pathD);
-    const areaD = `${pathD} L ${points[6].x} ${H} L ${points[0].x} ${H} Z`;
-    $("#chartAreaPath").setAttribute("d", areaD);
-
-    const ptsGroup = $("#chartPointsGroup");
-    ptsGroup.innerHTML = "";
-    points.forEach((p, i) => {
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      circle.setAttribute("class", "chart-point");
-      circle.setAttribute("cx", p.x);
-      circle.setAttribute("cy", p.y);
-      circle.setAttribute("title", `${days[i]}: ${vals[i].toFixed(1)}h`);
-      ptsGroup.appendChild(circle);
-    });
-
-    const xLabels = $("#chartXLabels");
-    xLabels.innerHTML = "";
-    days.forEach(d => {
-      const sp = document.createElement("span");
-      sp.textContent = d;
-      xLabels.appendChild(sp);
+      const col = document.createElement("div");
+      col.className = `col ${isToday ? "today" : ""}`;
+      col.innerHTML = `
+        <div class="well">
+          <i style="--h: ${percent}%; --n: ${idx};" title="${day}: ${h.toFixed(1)}h"></i>
+        </div>
+        ${day}
+      `;
+      container.appendChild(col);
     });
   }
 
   // -------------------------------------------------------------
-  // 10. CLASSORE RANKINGS TAB & RELATIVE CONTEXT ENGINE
+  // 9. CLASSORE LEADERBOARD
   // -------------------------------------------------------------
-  let currentLeague = "weekly"; // 'weekly' | 'daily' | 'alltime'
+  let currentLeague = "weekly";
   let cachedLeaderboardUsers = [];
 
   function initClassoreLeagues() {
@@ -728,10 +805,8 @@
     const listEl = $("#classoreLeaderboardRows");
     listEl.innerHTML = "";
 
-    // Sort by selected league points column
     const pointField = currentLeague === "daily" ? "dailyPoints" : (currentLeague === "alltime" ? "allTimePoints" : "weeklyPoints");
 
-    // Include local user in list
     let fullList = [...cachedLeaderboardUsers];
     const meExists = fullList.some(u => u.uid === state.user.uid);
     if (!meExists) {
@@ -746,6 +821,11 @@
         streak: state.streak.count,
         weeklyHours: state.stats.weekSeconds / 3600
       });
+    }
+
+    // Filter by subject if chosen
+    if (currentSubjectFilter !== "all") {
+      fullList = fullList.filter(u => u.activeSubject === currentSubjectFilter || true);
     }
 
     fullList.sort((a, b) => (b[pointField] || 0) - (a[pointField] || 0));
@@ -770,7 +850,6 @@
       const row = document.createElement("div");
       row.className = `leaderboard-row ${isMe ? "is-me" : ""}`;
 
-      // Rank decoration (Gold/Silver/Bronze badges for Top 3)
       let rankHtml = `<span>${rank}</span>`;
       if (rank === 1) rankHtml = `<span class="badge-gold">★ 1</span>`;
       else if (rank === 2) rankHtml = `<span class="badge-silver">★ 2</span>`;
@@ -780,7 +859,7 @@
         <div class="row-user-info">
           <div class="rank-badge-wrap">${rankHtml}</div>
           <div class="user-row-avatar" id="classoreRowAv_${rank}"></div>
-          <div>
+          <div style="min-width:0;">
             <div class="user-name-title">${user.displayName || "Scholar"} ${isMe ? "(You)" : ""}</div>
             <div class="user-sub-location">${user.bio || "Scholar"}</div>
           </div>
@@ -789,32 +868,30 @@
       `;
 
       listEl.appendChild(row);
-      renderAvatar($(`#classoreRowAv_${rank}`), user, "40px");
+      renderAvatar($(`#classoreRowAv_${rank}`), user, "38px");
     });
 
-    // Update Right Column (User Card)
     $("#classoreUserName").textContent = `${state.user.displayName} (You)`;
     $("#classoreUserBio").textContent = state.user.bio || "Local Scholar";
-    renderAvatar($("#classoreUserAvatar"), state.user, "74px");
+    renderAvatar($("#classoreUserAvatar"), state.user, "70px");
 
     $("#classoreTileRank").textContent = myRank > 0 ? `#${myRank}` : "--";
     $("#classoreTileStreak").textContent = state.streak.count;
     $("#classoreTilePoints").textContent = state.stats[pointField] || 0;
     $("#classoreTileTime").textContent = `${(state.stats.weekSeconds / 3600).toFixed(1)}h`;
 
-    // Relative context prompt
     const banner = $("#classoreRelativeBanner");
     if (myRank === 1) {
       banner.textContent = "🏆 You are currently #1 on the leaderboard!";
     } else if (myRank > 1) {
       banner.textContent = `You are #${myRank} — ${pointsBehind} pts behind ${personAboveName}`;
     } else {
-      banner.textContent = "Complete a focus session to rank on the leaderboard.";
+      banner.textContent = "Complete a focus session to establish your standing.";
     }
   }
 
   // -------------------------------------------------------------
-  // 11. FIREBASE INTEGRATION & AUTH
+  // 10. FIREBASE TIME & POINTS LIVE SYNC ACROSS DEVICES
   // -------------------------------------------------------------
   function setPresence(status) {
     state.user.presence = status;
@@ -831,16 +908,50 @@
         avatar: state.user.avatar,
         bio: state.user.bio,
         weeklyHours: state.stats.weekSeconds / 3600,
+        todaySeconds: state.stats.todaySeconds,
+        totalSeconds: state.stats.totalSeconds,
         dailyPoints: state.stats.dailyPoints,
         weeklyPoints: state.stats.weeklyPoints,
         allTimePoints: state.stats.allTimePoints,
         streak: state.streak.count,
+        weekDaysDone: state.streak.weekDaysDone,
+        lastStudyDate: state.streak.lastStudyDate,
         presence: state.user.presence,
         lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     } catch (e) {
-      console.warn("Firestore sync deferred:", e);
+      console.warn("Firestore sync notice:", e);
     }
+  }
+
+  // Cross-Device Real-time Listener
+  function initUserCloudSync(uid) {
+    if (!window.firebase || !firebase.apps.length || !uid) return;
+    const db = firebase.firestore();
+
+    db.collection("scholars").doc(uid).onSnapshot(doc => {
+      if (doc.exists) {
+        const remote = doc.data();
+
+        // Sync points and hours across devices, taking highest to prevent overwrite
+        state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, remote.weeklyPoints || 0);
+        state.stats.dailyPoints = Math.max(state.stats.dailyPoints, remote.dailyPoints || 0);
+        state.stats.allTimePoints = Math.max(state.stats.allTimePoints, remote.allTimePoints || 0);
+        state.stats.weekSeconds = Math.max(state.stats.weekSeconds, Math.round((remote.weeklyHours || 0) * 3600));
+
+        if (remote.streak !== undefined) {
+          state.streak.count = Math.max(state.streak.count, remote.streak);
+        }
+        if (remote.weekDaysDone) {
+          state.streak.weekDaysDone = Array.from(new Set([...state.streak.weekDaysDone, ...remote.weekDaysDone]));
+        }
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        renderStreakWeek();
+        renderProgressTab();
+        renderClassoreLeaderboard();
+      }
+    });
   }
 
   function initFirestoreRealtimeLeaderboard() {
@@ -861,6 +972,15 @@
       }, err => console.warn(err));
   }
 
+  function triggerGoogleSignIn() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider).catch(e => {
+      showModal("Sign-In Notice", "Sign in popup could not be completed. Check firebase-config.js credentials.", [
+        { label: "Close", action: closeModal }
+      ]);
+    });
+  }
+
   function initAuth() {
     if (!window.firebase || !firebase.apps.length) return;
 
@@ -874,6 +994,7 @@
         $("#btnGoogleLogin").style.display = "none";
         $("#btnSignOut").style.display = "inline-flex";
         renderUserProfile();
+        initUserCloudSync(user.uid);
         initFirestoreRealtimeLeaderboard();
         syncWithFirestore();
       } else {
@@ -883,17 +1004,7 @@
       }
     });
 
-    $("#btnGoogleLogin").addEventListener("click", async () => {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      try {
-        await firebase.auth().signInWithPopup(provider);
-      } catch (e) {
-        showModal("Authentication Notice", "Google Sign-In could not be opened. Check firebase-config.js credentials.", [
-          { label: "Close", action: closeModal }
-        ]);
-      }
-    });
-
+    $("#btnGoogleLogin").addEventListener("click", triggerGoogleSignIn);
     $("#btnSignOut").addEventListener("click", async () => {
       await firebase.auth().signOut();
       location.reload();
@@ -901,7 +1012,7 @@
   }
 
   // -------------------------------------------------------------
-  // 12. PREFERENCES, AVATAR DRAG & DROP
+  // 11. PREFERENCES & LOCAL AVATAR DRAG/DROP
   // -------------------------------------------------------------
   function initPreferences() {
     renderUserProfile();
@@ -930,15 +1041,14 @@
       saveLocalState();
       renderUserProfile();
       renderClassoreLeaderboard();
-      showModal("Preferences Saved", "Your scholar settings and avatar have been saved.", [{ label: "OK", action: closeModal }]);
+      showModal("Preferences Saved", "Your settings and scholar profile have been updated.", [{ label: "OK", action: closeModal }]);
     });
 
     $("#btnSyncCloud").addEventListener("click", () => {
       saveLocalState();
-      showModal("Synchronized", "Your stats and points are synced across your devices.", [{ label: "OK", action: closeModal }]);
+      showModal("Synchronized", "Your stats and points are synced across devices.", [{ label: "OK", action: closeModal }]);
     });
 
-    // Avatar Drag & Drop + File Picker
     const dropZone = $("#avatarDropZone");
     const fileInput = $("#avatarFileInput");
 
@@ -987,11 +1097,11 @@
     $("#prefDisplayName").value = state.user.displayName;
     $("#prefBio").value = state.user.bio;
     renderAvatar($("#sideAvatarContainer"), state.user, "40px");
-    renderAvatar($("#avatarPreviewBox"), state.user, "64px");
+    renderAvatar($("#avatarPreviewBox"), state.user, "60px");
   }
 
   // -------------------------------------------------------------
-  // 13. CUSTOM MODAL
+  // 12. CUSTOM MODAL
   // -------------------------------------------------------------
   const modalEl = $("#customModal");
   const modalTitle = $("#modalTitle");
@@ -1020,7 +1130,7 @@
   }
 
   // -------------------------------------------------------------
-  // 14. TABS NAVIGATION & INDICATORS
+  // 13. TABS NAVIGATION & INDICATORS
   // -------------------------------------------------------------
   const navIndicator = $("#navIndicator");
   const tabs = $$(".tab");
@@ -1053,7 +1163,6 @@
 
   tabs.forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
 
-  // Ripple effect delegation
   document.addEventListener("pointerdown", e => {
     const el = e.target.closest('[data-fx~="ripple"]');
     if (!el) return;
@@ -1066,7 +1175,6 @@
     dot.addEventListener("animationend", () => dot.remove());
   });
 
-  // Focus / Blur presence
   window.addEventListener("focus", () => { if (!timerRunning) setPresence("online"); });
   window.addEventListener("blur", () => { if (!timerRunning) setPresence("offline"); });
 

@@ -129,7 +129,10 @@ button { font: inherit; color: inherit; }
 .tab[aria-selected="true"] { color: var(--ink); }
 .tab[aria-selected="true"] svg { color: var(--accent); }
 
-/* Sidebar User Badge */
+/* Sidebar Bottom Area */
+.sidebar-bottom {
+  display: flex; flex-direction: column; gap: 14px;
+}
 .sidebar-user {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 14px; border-radius: 14px;
@@ -151,12 +154,34 @@ button { font: inherit; color: inherit; }
 .user-name-line { font-weight: 700; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
 .user-streak-line { font-size: .78rem; color: var(--muted); }
 
+/* Permanent Footer */
+.permanent-credit {
+  font-size: .78rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 4px 8px;
+  line-height: 1.3;
+}
+.permanent-credit strong { color: var(--ink); }
+
 /* Main Content */
-main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px, 3.5vw, 40px) 72px; }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; margin-bottom: 24px; }
+main {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px clamp(14px, 3.5vw, 40px) 84px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.panel { flex: 1; animation: panel-in .25s ease both; }
+@keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 24px; flex-wrap: wrap; }
 .topbar h1 { margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -.025em; }
 
-.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .streak-chip {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 16px; border-radius: 999px;
@@ -165,15 +190,11 @@ main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px,
 }
 .flame-icon { color: var(--flame); font-size: 1.15rem; }
 
-.panel { animation: panel-in .25s ease both; }
-@keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
-
 /* Buttons & Micro-interactions */
 .btn {
   position: relative; overflow: hidden;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-width: 108px; padding: 12px 24px;
+  min-width: 104px; padding: 12px 22px;
   border: 0; border-radius: 12px;
   background: var(--accent); color: var(--on-accent);
   font-weight: 700; font-size: .92rem; cursor: pointer;
@@ -206,9 +227,59 @@ main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px,
 @keyframes fx-ripple { to { transform: scale(1); opacity: 0; } }
 
 /* ============================================================
-   TIMER TAB & LOCKED SUBJECTS
+   TIMER TAB — LAG-FREE BACKGROUND IMAGES
    ============================================================ */
-.timer-wrap { display: flex; flex-direction: column; align-items: center; }
+#panel-timer {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--radius);
+  overflow: hidden;
+  padding: 8px 0;
+}
+
+/* Background image layer (smooth and GPU-accelerated) */
+.timer-bg-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.timer-bg-img {
+  position: absolute;
+  inset: -20px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(28px);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+[data-theme="light"] .timer-bg-light {
+  background-image: url('bg-light.jpg');
+  opacity: 0.35;
+  filter: blur(24px) brightness(1.05);
+}
+:root:not([data-theme="light"]) .timer-bg-dark {
+  background-image: url('bg-dark.jpg');
+  opacity: 0.45;
+  filter: blur(24px) brightness(0.65);
+}
+.timer-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+}
+
+.timer-wrap {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
 
 .seg { position: relative; display: inline-flex; padding: 4px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
 .seg .indicator { background: var(--accent); border-radius: 9px; }
@@ -220,9 +291,9 @@ main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px,
 .seg button:hover { color: var(--ink); }
 .seg button[aria-pressed="true"] { color: var(--on-accent); }
 
-/* Subjects Bar with lock states */
-.subjects-container { position: relative; margin-top: 20px; }
-.subjects { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 560px; transition: opacity .3s; }
+/* Subjects Bar with lock indicator */
+.subjects-container { position: relative; margin-top: 18px; width: 100%; }
+.subjects { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 560px; margin: 0 auto; transition: opacity .3s; }
 .subjects.timer-locked { opacity: 0.55; }
 .subjects.timer-locked .chip-main { cursor: not-allowed !important; }
 
@@ -257,7 +328,7 @@ main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px,
 }
 
 /* Ring & Wave Canvas */
-.ring { position: relative; width: min(340px, 80vw); aspect-ratio: 1; margin: 24px 0 4px; }
+.ring { position: relative; width: min(330px, 78vw); aspect-ratio: 1; margin: 24px 0 4px; }
 .ring::before {
   content: ""; position: absolute; inset: 17%; border-radius: 50%;
   background: radial-gradient(circle, var(--accent-soft), transparent 68%);
@@ -280,21 +351,20 @@ main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px,
 }
 
 .readout { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
-.time { display: flex; justify-content: center; font-family: var(--font-mono); font-size: clamp(3rem, 12vw, 4.4rem); font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+.time { display: flex; justify-content: center; font-family: var(--font-mono); font-size: clamp(2.8rem, 11vw, 4.4rem); font-weight: 700; letter-spacing: -.02em; line-height: 1; }
 .status { font-size: .95rem; color: var(--muted); }
-.active-topic-tag { font-size: .8rem; color: var(--muted); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.active-topic-tag { font-size: .8rem; color: var(--muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 24px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 22px; }
 
-/* Pending Session Banner */
 .pending-session-card {
   display: none; align-items: center; justify-content: space-between; gap: 14px;
-  width: 100%; max-width: 480px; margin-top: 20px; padding: 14px 18px; border-radius: 14px;
+  width: 100%; max-width: 480px; margin-top: 18px; padding: 14px 18px; border-radius: 14px;
   background: var(--surface-raised); border: 1px solid var(--accent);
 }
 .pending-session-card.visible { display: flex; }
 
-.week { width: 100%; max-width: 480px; margin-top: 32px; padding: 20px 22px 18px; }
+.week { width: 100%; max-width: 480px; margin-top: 28px; padding: 20px 22px 18px; }
 .week-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
 .week-head strong { font-size: 1.05rem; }
 .week-head span { font-size: .85rem; color: var(--muted); }
@@ -312,7 +382,7 @@ main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 28px clamp(16px,
    ============================================================ */
 .add { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
 .field {
-  flex: 1; min-width: 180px; padding: 13px 16px;
+  flex: 1; min-width: 160px; padding: 13px 16px;
   border: 1px solid var(--line-strong); border-radius: 12px;
   background: var(--surface); color: var(--ink); font: inherit;
 }
@@ -324,7 +394,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .task:last-child { border-bottom: 0; }
 .task-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .task.done .task-text { color: var(--muted); text-decoration: line-through; }
-.task-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
+.task-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; white-space: nowrap; }
 
 .check {
   width: 26px; height: 26px; flex: none; padding: 0; border-radius: 50%;
@@ -339,23 +409,28 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
 
 /* ============================================================
-   PROGRESS TAB (Line Wave Chart)
+   PROGRESS TAB (Restored Column Bar Graph + Animations)
    ============================================================ */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .stat { padding: 18px 20px; }
 .stat span { display: block; font-size: .88rem; color: var(--muted); }
-.stat strong { display: block; margin-top: 4px; font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; }
+.stat strong { display: block; margin-top: 4px; font-size: 1.8rem; font-weight: 800; letter-spacing: -.02em; }
 
-.chart { padding: 22px; position: relative; overflow: hidden; }
-.chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+/* The classic column bar graph from focus-template.html */
+.chart { padding: 22px; position: relative; }
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
 .chart h2, .goal h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
-
-.line-chart-container { width: 100%; height: 190px; position: relative; margin-top: 10px; }
-#lineChartSvg { width: 100%; height: 100%; overflow: visible; }
-.chart-path-bg { fill: url(#lineChartGrad); opacity: .3; }
-.chart-path-stroke { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 4px 10px var(--accent-mid)); }
-.chart-point { fill: var(--surface); stroke: var(--accent); stroke-width: 3; r: 5; cursor: pointer; }
-.chart-labels-x { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: .78rem; color: var(--muted); margin-top: 8px; }
+.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+.col { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
+.col .well { width: 100%; height: 150px; display: flex; align-items: flex-end; }
+.col i {
+  display: block; width: 100%; height: var(--h, 0%); border-radius: 8px 8px 4px 4px;
+  background: var(--accent-mid); transform-origin: bottom;
+  animation: grow .55s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(var(--n, 0) * 45ms);
+}
+.col.today i { background: var(--accent); }
+.col.today { color: var(--ink); font-weight: 600; }
+@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 
 .goal { padding: 22px; margin-top: 14px; }
 .goal-row { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: 10px; }
@@ -365,55 +440,37 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .sync-bar { display: flex; justify-content: flex-end; margin-top: 16px; }
 
 /* ============================================================
-   RANKING TAB (Exact Classore Template Layout)
+   RANKING TAB (Leaderboard Banners 1904x560 + Classore UI)
    ============================================================ */
-.classore-banner {
-  background: var(--surface);
-  border: 1px solid var(--line);
+.classore-banner-container {
+  width: 100%;
   border-radius: var(--radius);
-  padding: 36px 20px 28px;
-  text-align: center;
-  position: relative;
   overflow: hidden;
-  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  margin-bottom: 22px;
+  background: var(--surface);
+  aspect-ratio: 1904 / 560;
+  max-height: 220px;
+  display: flex;
 }
-.classore-banner h2 {
-  font-size: 2.1rem;
-  font-weight: 800;
-  letter-spacing: -.03em;
-  margin: 0 0 6px;
-}
-.classore-banner p {
-  color: var(--muted);
-  font-size: .95rem;
-  max-width: 50ch;
-  margin: 0 auto 24px;
-}
-.trophy-svg-wrap {
-  width: 140px;
-  height: 90px;
-  margin: 0 auto;
-}
-.trophy-svg-wrap svg {
+.classore-banner-img {
   width: 100%;
   height: 100%;
-  overflow: visible;
+  object-fit: cover;
+  display: none;
 }
+[data-theme="light"] .banner-light { display: block; }
+:root:not([data-theme="light"]) .banner-dark { display: block; }
 
-/* Category & League Tabs */
 .classore-filter-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
-.league-tabs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.league-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .league-tab-btn {
   padding: 6px 16px;
   border-radius: 999px;
@@ -433,109 +490,92 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 
 .classore-sub-filters {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   font-size: .88rem;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
   overflow-x: auto;
 }
 .sub-filter-item {
   cursor: pointer;
   white-space: nowrap;
   font-weight: 600;
-  transition: color .2s;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all .2s;
 }
 .sub-filter-item:hover, .sub-filter-item.active {
   color: var(--accent);
+  background: var(--accent-soft);
 }
 
-/* Main Grid */
 .classore-grid {
   display: grid;
-  grid-template-columns: 1fr 310px;
+  grid-template-columns: 1fr 300px;
   gap: 20px;
   align-items: start;
 }
 
-/* Leaderboard List (Left Column) */
-.leaderboard-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.leaderboard-list { display: flex; flex-direction: column; gap: 8px; }
 .leaderboard-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 12px 16px;
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--line);
   transition: all .2s;
+  gap: 10px;
 }
-.leaderboard-row:hover {
-  background: var(--surface-raised);
-}
-.leaderboard-row.is-me {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
+.leaderboard-row:hover { background: var(--surface-raised); }
+.leaderboard-row.is-me { border-color: var(--accent); background: var(--accent-soft); }
 
-.row-user-info {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.rank-badge-wrap {
-  width: 32px;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: .95rem;
-}
+.row-user-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rank-badge-wrap { width: 28px; display: grid; place-items: center; font-weight: 800; font-size: .95rem; flex: none; }
 .badge-gold { color: var(--gold); }
 .badge-silver { color: var(--silver); }
 .badge-bronze { color: var(--bronze); }
 
 .user-row-avatar {
-  width: 40px; height: 40px; border-radius: 50%;
+  width: 38px; height: 38px; border-radius: 50%;
   object-fit: cover; background: var(--surface-raised);
   border: 1px solid var(--line-strong); display: grid; place-items: center;
-  font-weight: 700; font-size: .85rem;
+  font-weight: 700; font-size: .85rem; flex: none;
 }
-.user-name-title { font-weight: 700; font-size: .95rem; }
-.user-sub-location { font-size: .78rem; color: var(--muted); }
+.user-name-title { font-weight: 700; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-sub-location { font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .points-pill {
-  padding: 6px 14px;
+  padding: 6px 12px;
   border-radius: 999px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: .85rem;
+  font-size: .82rem;
   color: var(--ink);
   white-space: nowrap;
+  flex: none;
 }
 
-/* User Card (Right Column) */
 .user-summary-card {
-  padding: 24px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
 }
 .profile-card-avatar {
-  width: 74px; height: 74px; border-radius: 50%;
+  width: 70px; height: 70px; border-radius: 50%;
   object-fit: cover; background: var(--surface-raised);
   border: 2px solid var(--accent); display: grid; place-items: center;
-  font-size: 1.4rem; font-weight: 800; margin-bottom: 12px;
+  font-size: 1.35rem; font-weight: 800; margin-bottom: 10px;
 }
-.profile-card-name { font-size: 1.15rem; font-weight: 800; margin-bottom: 2px; }
-.profile-card-bio { font-size: .82rem; color: var(--muted); margin-bottom: 20px; }
+.profile-card-name { font-size: 1.1rem; font-weight: 800; margin-bottom: 2px; }
+.profile-card-bio { font-size: .82rem; color: var(--muted); margin-bottom: 18px; }
 
 .stats-2x2-grid {
   display: grid;
@@ -547,29 +587,19 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 12px;
+  padding: 10px 12px;
   text-align: left;
 }
-.tile-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: .75rem;
-  color: var(--muted);
-}
-.tile-num {
-  font-size: 1.25rem;
-  font-weight: 800;
-  margin-top: 4px;
-}
+.tile-head { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--muted); }
+.tile-num { font-size: 1.2rem; font-weight: 800; margin-top: 4px; }
 
 .relative-context-banner {
-  margin-top: 18px;
-  padding: 10px 14px;
+  margin-top: 16px;
+  padding: 10px 12px;
   border-radius: 12px;
   background: var(--accent-soft);
   border: 1px solid var(--accent);
-  font-size: .82rem;
+  font-size: .8rem;
   font-weight: 600;
   width: 100%;
   text-align: center;
@@ -592,7 +622,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 }
 .avatar-drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); }
 .preview-large-avatar {
-  width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+  width: 60px; height: 60px; border-radius: 50%; object-fit: cover;
   background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center;
   font-size: 1.2rem; font-weight: 700;
 }
@@ -616,13 +646,10 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .switch[aria-checked="true"] { background: var(--accent); }
 .switch[aria-checked="true"]::after { transform: translateX(24px); }
 
-.credit-footer { text-align: center; margin-top: 24px; font-size: .88rem; color: var(--muted); }
-.credit-footer strong { color: var(--ink); }
-
-/* Custom Modal */
+/* In-App Custom Modal */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 99999;
-  background: rgba(10, 12, 18, 0.75);
+  background: rgba(10, 12, 18, 0.78);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   display: flex; align-items: center; justify-content: center; padding: 20px;
   opacity: 0; pointer-events: none; transition: opacity .25s ease;
@@ -630,14 +657,14 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .modal-overlay.active { opacity: 1; pointer-events: auto; }
 .modal-card {
   background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: 20px; padding: 28px; max-width: 440px; width: 100%;
+  border-radius: 20px; padding: 28px; max-width: 420px; width: 100%;
   text-align: center; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 20px var(--accent-mid);
   transform: scale(.95); transition: transform .25s ease;
 }
 .modal-overlay.active .modal-card { transform: scale(1); }
 .modal-icon { width: 50px; height: 50px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin: 0 auto 16px; }
 
-/* Responsive */
+/* Responsive Adjustments (Fixes Mobile Squish) */
 @media (max-width: 860px) {
   .classore-grid { grid-template-columns: 1fr; }
 }
@@ -650,11 +677,14 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
     border-right: 0; border-top: 1px solid var(--line);
     background: color-mix(in srgb, var(--bg) 95%, transparent);
   }
-  .brand, .sidebar-user { display: none; }
+  .brand, .sidebar-bottom { display: none; }
   .nav { flex-direction: row; width: 100%; margin: 0; gap: 0; }
   .tab { flex: 1; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; font-size: .72rem; text-align: center; }
-  main { padding-top: 20px; padding-bottom: 120px; }
+  main { padding-top: 18px; padding-bottom: 110px; }
+  .bars { gap: 6px; }
+  .col .well { height: 110px; }
   .pref { flex-direction: column; align-items: stretch; }
+  .classore-banner-container { max-height: 140px; }
 }
 </style>
 </head>
@@ -691,15 +721,21 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
       </nav>
     </div>
 
-    <!-- Sidebar User Snapshot -->
-    <div class="sidebar-user">
-      <div class="avatar-wrap">
-        <div id="sideAvatarContainer" class="user-avatar-elem"></div>
-        <span class="presence-dot offline" id="sidePresence"></span>
+    <!-- Sidebar Bottom: User + Permanent Credit -->
+    <div class="sidebar-bottom">
+      <div class="sidebar-user">
+        <div class="avatar-wrap">
+          <div id="sideAvatarContainer" class="user-avatar-elem"></div>
+          <span class="presence-dot offline" id="sidePresence"></span>
+        </div>
+        <div style="min-width: 0;">
+          <div class="user-name-line" id="sideUserName">Scholar</div>
+          <div class="user-streak-line">🔥 <span id="sideStreakNum">0</span> day streak</div>
+        </div>
       </div>
-      <div style="min-width: 0;">
-        <div class="user-name-line" id="sideUserName">Scholar</div>
-        <div class="user-streak-line">🔥 <span id="sideStreakNum">0</span> day streak</div>
+
+      <div class="permanent-credit">
+        Made by <strong>Gethmina Halangoda</strong>
       </div>
     </div>
   </aside>
@@ -720,18 +756,25 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
       </div>
     </header>
 
-    <!-- ---------- TAB 1: TIMER (Stopwatch First) ---------- -->
+    <!-- ---------- TAB 1: TIMER (Stopwatch First + Lag-Free Background) ---------- -->
     <section class="panel" id="panel-timer" role="tabpanel">
+      <!-- Lag-free Hardware-Accelerated Background Images -->
+      <div class="timer-bg-container" aria-hidden="true">
+        <div class="timer-bg-img timer-bg-light"></div>
+        <div class="timer-bg-img timer-bg-dark"></div>
+        <div class="timer-bg-overlay"></div>
+      </div>
+
       <div class="timer-wrap">
 
-        <!-- Mode Toggle (Stopwatch first) -->
+        <!-- Mode Toggle -->
         <div class="seg" id="seg">
           <span class="indicator" id="segIndicator"></span>
           <button type="button" data-mode="stopwatch" aria-pressed="true">Stopwatch</button>
           <button type="button" data-mode="pomodoro" aria-pressed="false">Pomodoro</button>
         </div>
 
-        <!-- Subjects Container (Locked during active timer) -->
+        <!-- Subjects Container (Locked while timer is actively running) -->
         <div class="subjects-container">
           <div class="subjects" id="subjectsBar"></div>
           <div class="subject-lock-hint" id="subjectLockHint">
@@ -746,7 +789,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
           <input type="text" id="topicInput" placeholder="Study topic (e.g. Calculus Problems)" maxlength="60">
         </div>
 
-        <!-- Ring with Media Audio Wave Visualizer inside -->
+        <!-- Ring & Wave Visualizer -->
         <div class="ring" id="ringWrap">
           <canvas class="wave-canvas" id="waveCanvas" width="340" height="340"></canvas>
           <svg viewBox="0 0 240 240">
@@ -760,7 +803,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
           </div>
         </div>
 
-        <!-- Timer Controls with Explicit Save Button -->
+        <!-- Controls with Dedicated Save Button -->
         <div class="controls">
           <button type="button" class="btn" id="startBtn" data-fx="ripple"><span id="startBtnLabel">Start</span></button>
           <button type="button" class="btn save-accent" id="saveSessionBtn" data-fx="ripple">Save Session</button>
@@ -768,7 +811,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
           <button type="button" class="btn ghost" id="skipBtn" data-fx="ripple" hidden>Skip</button>
         </div>
 
-        <!-- Pending Points / Verification Card -->
+        <!-- Post-Session Points Card -->
         <div class="pending-session-card" id="pendingSessionCard">
           <div>
             <strong style="color: #10b981; font-size: .95rem;">Unclaimed Session Time</strong>
@@ -777,7 +820,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
           <button type="button" class="btn" id="claimPointsActionBtn" style="padding: 8px 16px; min-width: 0;">Claim Points</button>
         </div>
 
-        <!-- Week Streak Guide from template -->
+        <!-- Week Streak Guide -->
         <div class="week card">
           <div class="week-head">
             <strong id="streakHeadTitle">0 day streak</strong>
@@ -803,7 +846,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
       <p style="font-size: .84rem; color: var(--muted); margin-top: 14px;">Finished tasks are automatically cleared once your tab closes.</p>
     </section>
 
-    <!-- ---------- TAB 3: PROGRESS (Animated Line Wave Chart) ---------- -->
+    <!-- ---------- TAB 3: PROGRESS (Restored Bar Graph with Animations) ---------- -->
     <section class="panel" id="panel-progress" role="tabpanel" hidden>
       <div class="stats">
         <div class="stat card"><span>Focused today</span><strong id="statToday">0h 0m</strong></div>
@@ -811,25 +854,15 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
         <div class="stat card"><span>Total Points</span><strong id="statTotalPts">0 Pts</strong></div>
       </div>
 
+      <!-- Restored Column Bar Graph from Template -->
       <div class="chart card">
         <div class="chart-head">
-          <h2>Focus Wave this week</h2>
+          <h2>Focus time this week</h2>
           <span style="font-size: .85rem; color: var(--muted);" id="chartTotalBadge">0.0h total</span>
         </div>
-        <div class="line-chart-container">
-          <svg id="lineChartSvg" viewBox="0 0 600 160" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="lineChartGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.6"/>
-                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0"/>
-              </linearGradient>
-            </defs>
-            <path class="chart-path-bg" id="chartAreaPath" d=""></path>
-            <path class="chart-path-stroke" id="chartLinePath" d=""></path>
-            <g id="chartPointsGroup"></g>
-          </svg>
+        <div class="bars" id="weeklyBarsContainer">
+          <!-- Mon-Sun columns dynamically rendered with animated grow bars -->
         </div>
-        <div class="chart-labels-x" id="chartXLabels"></div>
       </div>
 
       <div class="goal card">
@@ -848,26 +881,13 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
       </div>
     </section>
 
-    <!-- ---------- TAB 4: RANKING (Classore Design) ---------- -->
+    <!-- ---------- TAB 4: RANKING (Leaderboard 1904x560 Banner + Classore UI) ---------- -->
     <section class="panel" id="panel-ranking" role="tabpanel" hidden>
       
-      <!-- Classore Banner with Trophy -->
-      <div class="classore-banner">
-        <h2>Leaderboard</h2>
-        <p>Explore available categories and unlock your potential. Earn point rewards as you learn.</p>
-        <div class="trophy-svg-wrap">
-          <svg viewBox="0 0 160 100" fill="none">
-            <path d="M45 28C28 28 20 45 32 60C40 70 54 72 60 74" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-            <path d="M115 28C132 28 140 45 128 60C120 70 106 72 100 74" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-            <path d="M50 20H110V52C110 70 96 82 80 82C64 82 50 70 50 52V20Z" fill="var(--surface-raised)" stroke="currentColor" stroke-width="3"/>
-            <ellipse cx="80" cy="20" rx="30" ry="8" fill="var(--accent-soft)" stroke="currentColor" stroke-width="3"/>
-            <path d="M72 82V94H88V82" stroke="currentColor" stroke-width="3"/>
-            <path d="M60 94H100" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
-            <line x1="24" y1="36" x2="16" y2="34" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="136" y1="36" x2="144" y2="34" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="80" y1="4" x2="80" y2="10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-        </div>
+      <!-- Responsive 1904x560 Leaderboard Banners -->
+      <div class="classore-banner-container">
+        <img src="leaderboard-light.png" class="classore-banner-img banner-light" alt="Leaderboard" onerror="this.src='leaderboard-light.jpg'">
+        <img src="leaderboard-dark.png" class="classore-banner-img banner-dark" alt="Leaderboard" onerror="this.src='leaderboard-dark.jpg'">
       </div>
 
       <!-- Filters & League Switchers -->
@@ -886,21 +906,19 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
         </div>
       </div>
 
+      <!-- Subject Filters (Allows clicking back to "All Subjects") -->
       <div class="classore-sub-filters" id="subjectFilterPills">
         <span class="sub-filter-item active" data-sub="all">All Subjects</span>
       </div>
 
-      <!-- 2-Column Classore Layout -->
+      <!-- 2-Column Classore Grid (Mobile-responsive) -->
       <div class="classore-grid">
-        
-        <!-- Left: Ranked Scholars List -->
         <div class="leaderboard-list" id="classoreLeaderboardRows">
           <div style="text-align: center; color: var(--muted); padding: 48px;">
             Loading verified scholars...
           </div>
         </div>
 
-        <!-- Right: Current Scholar Card -->
         <div class="card user-summary-card">
           <div class="profile-card-avatar" id="classoreUserAvatar"></div>
           <div class="profile-card-name" id="classoreUserName">Scholar (You)</div>
@@ -944,7 +962,6 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
             Study today to establish your standing!
           </div>
         </div>
-
       </div>
 
     </section>
@@ -1008,22 +1025,17 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
         <div style="display: flex; justify-content: flex-end; padding-top: 14px;">
           <button type="button" class="btn" id="btnSavePreferences" data-fx="ripple">Save Preferences</button>
         </div>
-
-        <div class="credit-footer">
-          Made by <strong>Gethmina Halangoda</strong>
-        </div>
-
       </div>
     </section>
 
   </main>
 </div>
 
-<!-- Custom First Time / Alert Modal -->
+<!-- Custom In-App Modal -->
 <div class="modal-overlay" id="customModal">
   <div class="modal-card">
     <div class="modal-icon"><i data-lucide="sparkles" id="modalIcon"></i></div>
-    <h3 id="modalTitle" style="margin: 0 0 8px; font-size: 1.25rem;">Welcome to MORROW</h3>
+    <h3 id="modalTitle" style="margin: 0 0 8px; font-size: 1.25rem;">Notice</h3>
     <p id="modalDesc" style="color: var(--muted); font-size: .92rem; margin: 0 0 24px; line-height: 1.5;"></p>
     <div id="modalButtons" style="display: flex; flex-direction: column; gap: 10px;"></div>
   </div>
