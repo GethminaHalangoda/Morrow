@@ -81,13 +81,17 @@ input, textarea {
   -webkit-user-select: text !important;
 }
 
-html, body { margin: 0; min-height: 100vh; }
+html, body {
+  margin: 0;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+}
 body {
   font-family: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.5;
-  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   transition: background-color .3s ease, color .3s ease;
 }
@@ -97,7 +101,14 @@ button { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 [hidden] { display: none !important; }
 
-.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; position: relative; }
+.app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+  overflow-x: hidden;
+}
 
 /* Sidebar */
 .sidebar {
@@ -164,7 +175,7 @@ button { font: inherit; color: inherit; }
 }
 .permanent-credit strong { color: var(--ink); }
 
-/* Main Content */
+/* Main Content Area */
 main {
   width: 100%;
   max-width: 1080px;
@@ -176,19 +187,29 @@ main {
   position: relative;
   z-index: 1;
 }
-.panel { flex: 1; animation: panel-in .25s ease both; }
+.panel { flex: 1; animation: panel-in .25s ease both; width: 100%; }
 @keyframes panel-in { from { opacity: 0; } to { opacity: 1; } }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 24px; flex-wrap: wrap; position: relative; z-index: 2; }
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  margin-bottom: 24px;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+}
 .topbar h1 { margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -.025em; }
 
-.topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
 .streak-chip {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 16px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 999px;
   background: var(--surface); border: 1px solid var(--line);
-  font-weight: 600; font-size: .9rem; white-space: nowrap;
+  font-weight: 600; font-size: .88rem; white-space: nowrap;
 }
 .flame-icon { color: var(--flame); font-size: 1.15rem; }
 
@@ -236,7 +257,6 @@ main {
   padding: 8px 0;
 }
 
-/* Fullscreen Background Layer (Spans 100vw x 100vh) */
 .timer-bg-container {
   position: fixed;
   inset: 0;
@@ -248,11 +268,11 @@ main {
 }
 .timer-bg-img {
   position: absolute;
-  inset: -15px; /* Slight offset prevents blur edge borders */
+  inset: -15px;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: blur(7px); /* Subtly lowered blur to recognize the image clearly */
+  filter: blur(7px);
   transform: translate3d(0, 0, 0) scale(1.03);
   will-change: transform, opacity;
   opacity: 0;
@@ -296,7 +316,6 @@ main {
 .seg button:hover { color: var(--ink); }
 .seg button[aria-pressed="true"] { color: var(--on-accent); }
 
-/* Subjects Bar with lock indicator */
 .subjects-container { position: relative; margin-top: 18px; width: 100%; }
 .subjects { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 560px; margin: 0 auto; transition: opacity .3s; }
 .subjects.timer-locked { opacity: 0.55; }
@@ -332,8 +351,7 @@ main {
   flex: 1; border: 0; background: none; color: var(--ink); font: inherit; outline: none; font-size: .9rem;
 }
 
-/* Ring & Wave Canvas */
-.ring { position: relative; width: min(330px, 78vw); aspect-ratio: 1; margin: 24px 0 4px; }
+.ring { position: relative; width: min(330px, 76vw); aspect-ratio: 1; margin: 20px 0 4px; }
 .ring::before {
   content: ""; position: absolute; inset: 17%; border-radius: 50%;
   background: radial-gradient(circle, var(--accent-soft), transparent 68%);
@@ -360,7 +378,15 @@ main {
 .status { font-size: .95rem; color: var(--muted); }
 .active-topic-tag { font-size: .8rem; color: var(--muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 22px; }
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 22px;
+  width: 100%;
+  max-width: 440px;
+}
 
 .pending-session-card {
   display: none; align-items: center; justify-content: space-between; gap: 14px;
@@ -385,21 +411,21 @@ main {
 /* ============================================================
    TASKS TAB
    ============================================================ */
-.add { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.add { display: flex; gap: 10px; margin-bottom: 20px; width: 100%; }
 .field {
-  flex: 1; min-width: 160px; padding: 13px 16px;
+  flex: 1; min-width: 0; padding: 13px 16px;
   border: 1px solid var(--line-strong); border-radius: 12px;
   background: var(--surface); color: var(--ink); font: inherit;
 }
 .field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 
-.task-list { list-style: none; margin: 0; padding: 0; }
+.task-list { list-style: none; margin: 0; padding: 0; width: 100%; }
 .task { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .task:last-child { border-bottom: 0; }
 .task-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .task.done .task-text { color: var(--muted); text-decoration: line-through; }
-.task-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; white-space: nowrap; }
+.task-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
 
 .check {
   width: 26px; height: 26px; flex: none; padding: 0; border-radius: 50%;
@@ -409,26 +435,36 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .check svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: none; }
 .check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
 .check[aria-checked="true"] svg { display: block; }
-.del-task-btn { border: 0; background: none; padding: 6px; color: var(--muted); cursor: pointer; border-radius: 6px; }
+.del-task-btn { border: 0; background: none; padding: 6px; color: var(--muted); cursor: pointer; border-radius: 6px; flex-shrink: 0; }
 .del-task-btn:hover { color: var(--danger); background: var(--accent-soft); }
 .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
 
 /* ============================================================
    PROGRESS TAB (Restored Column Bar Graph + Animations)
    ============================================================ */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; width: 100%; }
 .stat { padding: 18px 20px; }
 .stat span { display: block; font-size: .88rem; color: var(--muted); }
 .stat strong { display: block; margin-top: 4px; font-size: 1.8rem; font-weight: 800; letter-spacing: -.02em; }
 
-.chart { padding: 22px; position: relative; }
+.chart { padding: 22px; position: relative; width: 100%; }
 .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
 .chart h2, .goal h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
-.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+
+.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; width: 100%; }
 .col { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
-.col .well { width: 100%; height: 150px; display: flex; align-items: flex-end; }
+.col .well {
+  width: 100%;
+  height: 140px;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 2px;
+}
 .col i {
-  display: block; width: 100%; height: var(--h, 0%); border-radius: 8px 8px 4px 4px;
+  display: block; width: 100%; height: var(--h, 0%); border-radius: 6px;
   background: var(--accent-mid); transform-origin: bottom;
   animation: grow .55s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(var(--n, 0) * 45ms);
 }
@@ -436,15 +472,15 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .col.today { color: var(--ink); font-weight: 600; }
 @keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 
-.goal { padding: 22px; margin-top: 14px; }
+.goal { padding: 22px; margin-top: 14px; width: 100%; }
 .goal-row { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: 10px; }
 .meter { height: 10px; border-radius: 999px; background: var(--line-strong); overflow: hidden; }
 .meter i { display: block; height: 100%; width: 0%; border-radius: inherit; background: var(--accent); transition: width .5s ease; }
 
-.sync-bar { display: flex; justify-content: flex-end; margin-top: 16px; }
+.sync-bar { display: flex; justify-content: flex-end; margin-top: 16px; width: 100%; }
 
 /* ============================================================
-   RANKING TAB (Leaderboard Banners 1904x560 + Classore UI)
+   RANKING TAB (Leaderboard 1904x560 Banner + Classore UI)
    ============================================================ */
 .classore-banner-container {
   width: 100%;
@@ -473,6 +509,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 12px;
+  width: 100%;
 }
 .league-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .league-tab-btn {
@@ -494,21 +531,24 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 
 .classore-sub-filters {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   font-size: .88rem;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
   margin-bottom: 20px;
   overflow-x: auto;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 .sub-filter-item {
   cursor: pointer;
   white-space: nowrap;
   font-weight: 600;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 8px;
   transition: all .2s;
+  flex-shrink: 0;
 }
 .sub-filter-item:hover, .sub-filter-item.active {
   color: var(--accent);
@@ -520,9 +560,10 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
   grid-template-columns: 1fr 300px;
   gap: 20px;
   align-items: start;
+  width: 100%;
 }
 
-.leaderboard-list { display: flex; flex-direction: column; gap: 8px; }
+.leaderboard-list { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .leaderboard-row {
   display: flex;
   align-items: center;
@@ -533,11 +574,12 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
   border: 1px solid var(--line);
   transition: all .2s;
   gap: 10px;
+  width: 100%;
 }
 .leaderboard-row:hover { background: var(--surface-raised); }
 .leaderboard-row.is-me { border-color: var(--accent); background: var(--accent-soft); }
 
-.row-user-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.row-user-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .rank-badge-wrap { width: 28px; display: grid; place-items: center; font-weight: 800; font-size: .95rem; flex: none; }
 .badge-gold { color: var(--gold); }
 .badge-silver { color: var(--silver); }
@@ -553,7 +595,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .user-sub-location { font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .points-pill {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-radius: 999px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
@@ -571,6 +613,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
   flex-direction: column;
   align-items: center;
   text-align: center;
+  width: 100%;
 }
 .profile-card-avatar {
   width: 70px; height: 70px; border-radius: 50%;
@@ -612,8 +655,8 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 /* ============================================================
    PREFERENCES TAB
    ============================================================ */
-.prefs { padding: 8px 24px; }
-.pref { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.prefs { padding: 12px 24px; width: 100%; }
+.pref { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line); width: 100%; }
 .pref:last-child { border-bottom: 0; }
 .pref h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
 .pref p { margin: 3px 0 0; font-size: .88rem; color: var(--muted); }
@@ -628,7 +671,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .preview-large-avatar {
   width: 60px; height: 60px; border-radius: 50%; object-fit: cover;
   background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center;
-  font-size: 1.2rem; font-weight: 700;
+  font-size: 1.2rem; font-weight: 700; flex-shrink: 0;
 }
 
 .subject-edit-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; width: 100%; max-width: 420px; }
@@ -668,27 +711,229 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .modal-overlay.active .modal-card { transform: scale(1); }
 .modal-icon { width: 50px; height: 50px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin: 0 auto 16px; }
 
-/* Responsive Adjustments */
+/* ============================================================
+   RESPONSIVE MOBILE ENGINE (Fixes All Phone Squishing)
+   ============================================================ */
 @media (max-width: 860px) {
   .classore-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; }
-  .sidebar {
-    position: fixed; inset: auto 0 0 0; height: auto;
-    flex-direction: row; gap: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
-    border-right: 0; border-top: 1px solid var(--line);
-    background: color-mix(in srgb, var(--bg) 95%, transparent);
+  .app {
+    grid-template-columns: 1fr;
+    width: 100vw;
+    overflow-x: hidden;
   }
-  .brand, .sidebar-bottom { display: none; }
-  .nav { flex-direction: row; width: 100%; margin: 0; gap: 0; }
-  .tab { flex: 1; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; font-size: .72rem; text-align: center; }
-  main { padding-top: 18px; padding-bottom: 110px; }
-  .bars { gap: 6px; }
-  .col .well { height: 110px; }
-  .pref { flex-direction: column; align-items: stretch; }
-  .classore-banner-container { max-height: 140px; }
+
+  /* Fixed Bottom Bar */
+  .sidebar {
+    position: fixed;
+    inset: auto 0 0 0;
+    height: auto;
+    width: 100vw;
+    flex-direction: row;
+    gap: 0;
+    padding: 6px 4px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-right: 0;
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+  }
+  .brand, .sidebar-bottom { display: none !important; }
+  .nav { flex-direction: row; width: 100%; margin: 0; gap: 2px; }
+  .tab {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 2px;
+    font-size: .68rem;
+    text-align: center;
+    border-radius: 8px;
+    min-width: 0;
+  }
+  .tab span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+
+  /* Main Container Padding to Never Hide Content Under Bottom Bar */
+  main {
+    padding: 16px 14px calc(130px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Topbar Mobile Formatting */
+  .topbar {
+    margin-bottom: 18px;
+    gap: 8px;
+  }
+  .topbar h1 {
+    font-size: 1.45rem;
+  }
+  .streak-chip {
+    padding: 5px 10px;
+    font-size: .8rem;
+  }
+
+  /* Timer Tab Adjustments */
+  .ring {
+    width: min(290px, 74vw);
+    margin: 16px 0 4px;
+  }
+  .time {
+    font-size: clamp(2.4rem, 10vw, 3.4rem);
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    max-width: 360px;
+  }
+  .controls .btn {
+    min-width: 0;
+    padding: 12px 14px;
+    font-size: .88rem;
+  }
+  #resetBtn {
+    grid-column: 1 / -1;
+  }
+  .week {
+    padding: 16px 14px;
+    margin-top: 20px;
+  }
+  .dot {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* Tasks Form: Line 1 Input 100%, Line 2 Dropdown + Button */
+  .add {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  #taskInput {
+    width: 100%;
+  }
+  .add-sub-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+  #taskSubSelect {
+    flex: 1;
+    min-width: 0;
+  }
+  .add .btn {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 14px;
+  }
+
+  /* Progress Tab: Clean 3-Column Mobile Stats */
+  .stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .stat {
+    padding: 12px 8px;
+    text-align: center;
+  }
+  .stat span {
+    font-size: .72rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stat strong {
+    font-size: 1.25rem;
+    margin-top: 2px;
+  }
+
+  /* Restored Bars on Mobile */
+  .bars {
+    gap: 6px;
+  }
+  .col .well {
+    height: 110px;
+  }
+
+  /* Ranking Mobile Tuning */
+  .classore-banner-container {
+    max-height: 120px;
+    margin-bottom: 16px;
+  }
+  .classore-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .league-tabs {
+    display: flex;
+    width: 100%;
+  }
+  .league-tab-btn {
+    flex: 1;
+    text-align: center;
+    padding: 6px 8px;
+    font-size: .78rem;
+  }
+  .leaderboard-row {
+    padding: 10px 12px;
+  }
+  .points-pill {
+    padding: 4px 8px;
+    font-size: .75rem;
+  }
+  .stats-2x2-grid {
+    gap: 8px;
+  }
+  .stat-mini-tile {
+    padding: 8px 10px;
+  }
+  .tile-num {
+    font-size: 1.1rem;
+  }
+
+  /* Preferences Mobile Adjustments */
+  .prefs {
+    padding: 12px 14px;
+  }
+  .pref {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 16px 0;
+  }
+  .new-subject-form {
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  .new-subject-form-controls {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+  #newSubColor {
+    width: 48px;
+    flex-shrink: 0;
+  }
+  .new-subject-form .btn {
+    flex: 1;
+  }
+  #btnSavePreferences {
+    width: 100%;
+    padding: 14px;
+  }
 }
 </style>
 </head>
@@ -840,8 +1085,10 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
     <section class="panel" id="panel-tasks" role="tabpanel" hidden>
       <form class="add" id="taskForm" autocomplete="off">
         <input class="field" id="taskInput" type="text" maxlength="120" placeholder="What are you working on?" required>
-        <select class="field" id="taskSubSelect"></select>
-        <button type="submit" class="btn" data-fx="ripple">Add task</button>
+        <div class="add-sub-row">
+          <select class="field" id="taskSubSelect"></select>
+          <button type="submit" class="btn" data-fx="ripple">Add task</button>
+        </div>
       </form>
       <div class="card">
         <ul class="task-list" id="taskList"></ul>
@@ -1007,8 +1254,10 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
             <div class="subject-edit-list" id="prefSubjectList"></div>
             <form class="new-subject-form" id="newSubjectForm">
               <input type="text" class="field" id="newSubName" placeholder="New subject name" required style="padding: 8px 12px;">
-              <input type="color" id="newSubColor" value="#3b82f6" style="width: 42px; height: 38px; border: 0; background: none; cursor: pointer;">
-              <button type="submit" class="btn" style="min-width: 0; padding: 8px 18px;">Add</button>
+              <div class="new-subject-form-controls">
+                <input type="color" id="newSubColor" value="#3b82f6" style="height: 38px; border: 0; background: none; cursor: pointer;">
+                <button type="submit" class="btn" style="min-width: 0; padding: 8px 18px;">Add</button>
+              </div>
             </form>
           </div>
         </div>

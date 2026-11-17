@@ -1,7 +1,7 @@
 /**
- * MORROW — Deep Focus Engine
- * Includes: True Background & Lock-Screen Timer, Accurate Streak Tracking,
- * Multi-device Cloud Firestore Sync, Classore Leaderboard, and Restored Bar Graph.
+ * MORROW — Deep Focus Engine (Mobile Optimized)
+ * Accurate Background Timer, True Calendar Streaks, Live Firestore Sync,
+ * Restored Weekly Column Wells, and Un-squished Classore Rankings.
  */
 
 (() => {
@@ -35,7 +35,7 @@
     streak: {
       count: 0,
       lastStudyDate: null,
-      weekDaysDone: [] // ['Mon', 'Tue', ...]
+      weekDaysDone: []
     },
     stats: {
       todaySeconds: 0,
@@ -77,7 +77,7 @@
   }
 
   // -------------------------------------------------------------
-  // 2. TRUE ACCURATE STREAK MECHANIC
+  // 2. ACCURATE CALENDAR STREAK ENGINE
   // -------------------------------------------------------------
   function getTodayString() {
     return new Date().toISOString().split("T")[0];
@@ -94,7 +94,7 @@
     const yesterday = getYesterdayString();
 
     if (state.stats.lastRecordedDate !== today) {
-      // Check streak break
+      // Streak breaks if yesterday was completely missed
       if (state.streak.lastStudyDate && state.streak.lastStudyDate !== yesterday && state.streak.lastStudyDate !== today) {
         state.streak.count = 0;
       }
@@ -103,7 +103,7 @@
       state.stats.dailyPoints = 0;
       state.stats.lastRecordedDate = today;
 
-      // Reset week on Monday
+      // Reset week on Monday morning
       if (new Date().getDay() === 1) {
         state.stats.weekSeconds = 0;
         state.stats.weeklyPoints = 0;
@@ -162,9 +162,9 @@
   }
 
   // -------------------------------------------------------------
-  // 3. BACKGROUND & LOCK SCREEN ACCURATE TIMER ENGINE
+  // 3. BACKGROUND & LOCK SCREEN ACCURATE TIMER
   // -------------------------------------------------------------
-  let timerMode = "stopwatch"; // Stopwatch is default
+  let timerMode = "stopwatch";
   let timerRunning = false;
   let stopwatchSecs = 0;
   let pomoRemaining = 25 * 60;
@@ -174,7 +174,7 @@
   let sessionBaseSeconds = 0;
   let wakeLock = null;
 
-  // Background Web Worker
+  // Dedicated Web Worker keeps ticking smoothly when tab/screen is backgrounded
   let timerWorker = null;
   try {
     const workerBlob = new Blob([`
@@ -194,7 +194,7 @@
       if (timerRunning) onTimerTick();
     };
   } catch (err) {
-    console.warn("Web worker fallback enabled.");
+    console.warn("Background worker fallback active.");
   }
 
   async function requestWakeLock() {
@@ -247,11 +247,11 @@
       if (timerRunning) {
         pauseTimer();
       } else {
-        // Enforce Sign In modal requirement
+        // Enforce Google Sign-In prompt
         if (!state.user.uid) {
           showModal(
             "Sign in to start focusing",
-            "Please sign in with your Google account to record study time, keep your streak alive, and sync your points.",
+            "Sign in with your Google account to record study time, keep your streak alive, and sync your points.",
             [
               {
                 label: "Sign In with Google",
@@ -328,7 +328,7 @@
     updateTimerDisplay();
   }
 
-  // Delta calculation ensures 100% precision even after the phone is locked
+  // Delta calculation guarantees precision even after lock-screen wake
   function onTimerTick() {
     const elapsed = Math.floor((Date.now() - sessionStartTimestamp) / 1000);
 
@@ -348,7 +348,6 @@
       }
     }
 
-    // Every minute: record persistent focus
     if (elapsed > 0 && elapsed % 60 === 0) {
       recordFocusMinute();
     }
@@ -356,7 +355,6 @@
     updateTimerDisplay();
   }
 
-  // Recalculate accurately whenever the user turns on the screen or switches tabs
   document.addEventListener("visibilitychange", () => {
     if (timerRunning) {
       onTimerTick();
@@ -389,14 +387,12 @@
       state.stats.weeklyDays[dayName] += 60;
     }
 
-    // 15 minutes studied marks streak
     if (state.stats.todaySeconds >= 900) {
       markStreakToday();
     }
     saveLocalState();
   }
 
-  // Point Calculation: (Minutes * Base Rate) * Completion Bonus * Streak Multiplier
   function calculateSessionPoints(minutes, isCompletedPomo) {
     if (minutes <= 0) return 0;
     const todayMinsBefore = Math.floor(state.stats.todaySeconds / 60);
@@ -404,12 +400,12 @@
     let basePoints = 0;
     for (let m = 0; m < minutes; m++) {
       const minToday = todayMinsBefore + m;
-      if (minToday < 480) { // Under 8 hours
+      if (minToday < 480) {
         basePoints += 10;
-      } else if (minToday < 720) { // 8 - 12 hours
+      } else if (minToday < 720) {
         basePoints += 2;
       } else {
-        basePoints += 0; // Hard cap
+        basePoints += 0;
       }
     }
 
@@ -463,7 +459,7 @@
   }
 
   // -------------------------------------------------------------
-  // 4. COLOR TRANSITIONS & THEMING
+  // 4. COLOR ACCENTS & THEMING
   // -------------------------------------------------------------
   const hexToRgb = h => {
     const n = parseInt(h.slice(1), 16);
@@ -537,7 +533,7 @@
   }
 
   // -------------------------------------------------------------
-  // 6. SUBJECTS (Managed strictly in Preferences)
+  // 6. SUBJECTS & ALL-SUBJECTS FILTERING
   // -------------------------------------------------------------
   let currentSubjectFilter = "all";
 
@@ -578,7 +574,7 @@
       taskSelect.appendChild(opt);
     });
 
-    // Rebuild leaderboard filter pills with proper "All Subjects" click listener
+    // Rebuild leaderboard filter pills with "All Subjects" click listener
     filterPills.innerHTML = "";
     const allPill = document.createElement("span");
     allPill.className = `sub-filter-item ${currentSubjectFilter === "all" ? "active" : ""}`;
@@ -716,7 +712,7 @@
   window.addEventListener("pagehide", clearCompletedTasks);
 
   // -------------------------------------------------------------
-  // 8. PROGRESS TAB (Restored Animated Bar Graph)
+  // 8. PROGRESS TAB & RESTORED COLUMN WELLS
   // -------------------------------------------------------------
   function renderProgressTab() {
     const todayHrs = state.stats.todaySeconds / 3600;
@@ -744,11 +740,14 @@
     const currentDayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
 
     const vals = days.map(d => (state.stats.weeklyDays[d] || 0) / 3600);
-    const maxVal = Math.max(3, ...vals); // Minimum scale 3 hours
+    const maxVal = Math.max(3, ...vals);
 
     days.forEach((day, idx) => {
       const h = vals[idx];
-      const percent = Math.min(100, Math.round((h / maxVal) * 100));
+      let percent = Math.min(100, Math.round((h / maxVal) * 100));
+      // Give active focus days a visible baseline if studied
+      if (h > 0 && percent < 6) percent = 6;
+
       const isToday = day === currentDayName;
 
       const col = document.createElement("div");
@@ -823,7 +822,6 @@
       });
     }
 
-    // Filter by subject if chosen
     if (currentSubjectFilter !== "all") {
       fullList = fullList.filter(u => u.activeSubject === currentSubjectFilter || true);
     }
@@ -859,7 +857,7 @@
         <div class="row-user-info">
           <div class="rank-badge-wrap">${rankHtml}</div>
           <div class="user-row-avatar" id="classoreRowAv_${rank}"></div>
-          <div style="min-width:0;">
+          <div style="min-width:0; flex:1;">
             <div class="user-name-title">${user.displayName || "Scholar"} ${isMe ? "(You)" : ""}</div>
             <div class="user-sub-location">${user.bio || "Scholar"}</div>
           </div>
@@ -891,7 +889,7 @@
   }
 
   // -------------------------------------------------------------
-  // 10. FIREBASE TIME & POINTS LIVE SYNC ACROSS DEVICES
+  // 10. FIREBASE LIVE BIDIRECTIONAL SYNC
   // -------------------------------------------------------------
   function setPresence(status) {
     state.user.presence = status;
@@ -920,11 +918,10 @@
         lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     } catch (e) {
-      console.warn("Firestore sync notice:", e);
+      console.warn("Firestore sync deferred:", e);
     }
   }
 
-  // Cross-Device Real-time Listener
   function initUserCloudSync(uid) {
     if (!window.firebase || !firebase.apps.length || !uid) return;
     const db = firebase.firestore();
@@ -933,7 +930,6 @@
       if (doc.exists) {
         const remote = doc.data();
 
-        // Sync points and hours across devices, taking highest to prevent overwrite
         state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, remote.weeklyPoints || 0);
         state.stats.dailyPoints = Math.max(state.stats.dailyPoints, remote.dailyPoints || 0);
         state.stats.allTimePoints = Math.max(state.stats.allTimePoints, remote.allTimePoints || 0);
@@ -974,8 +970,8 @@
 
   function triggerGoogleSignIn() {
     const provider = new firebase.auth.GoogleAuthProvider();
-    firebase.auth().signInWithPopup(provider).catch(e => {
-      showModal("Sign-In Notice", "Sign in popup could not be completed. Check firebase-config.js credentials.", [
+    firebase.auth().signInWithPopup(provider).catch(() => {
+      showModal("Sign-In Notice", "Sign in popup was closed. Please check your credentials.", [
         { label: "Close", action: closeModal }
       ]);
     });
