@@ -1,8 +1,14 @@
 /**
  * MORROW — Deep Focus Engine
- * Includes: Admin Control Panel & Profile Editor for gethminahalangoda@gmail.com,
- * Real-Time Global & Direct Notifications, Telegram-Style Verified Badges,
- * Lock-Screen Accurate Timer, Calendar Streaks, and Classore Leaderboard.
+ * Includes:
+ * - Native OS/Phone System Notifications (Windows, Mac, Android) via Service Worker
+ * - Super Admin Controls for gethminahalangoda@gmail.com (Broadcasts, 1-on-1 messaging, Stat editing)
+ * - Telegram-style Verified Blue Badges
+ * - Cloud-First Firestore Hydration (Eliminates 0-point overwrites)
+ * - Background Lock-Screen Timer (Web Worker + WakeLock + Timestamp Delta)
+ * - Accurate Calendar Streak System
+ * - Classore Leaderboard with Live Server Refresh
+ * - Restored Animated Bar Graph
  */
 
 (() => {
@@ -150,9 +156,53 @@
   }
 
   // -------------------------------------------------------------
+  // NATIVE OS / PHONE SYSTEM NOTIFICATIONS ENGINE
+  // -------------------------------------------------------------
+  async function initSystemNotifications() {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      console.warn("System notifications are not supported by this browser.");
+      return;
+    }
+
+    try {
+      await navigator.serviceWorker.register('sw.js');
+      console.log("[MORROW] Service Worker registered for system notifications.");
+
+      if (Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+    } catch (err) {
+      console.warn("Service worker registration error:", err);
+    }
+  }
+
+  async function triggerRealOSNotification(title, message) {
+    if (!('Notification' in window)) return;
+
+    if (Notification.permission === 'granted') {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        reg.showNotification(title, {
+          body: message,
+          icon: 'App logo.jpg',
+          badge: 'App logo.jpg',
+          vibrate: [200, 100, 200],
+          tag: 'morrow-notif-' + Date.now(),
+          renotify: true
+        });
+      } catch (e) {
+        new Notification(title, {
+          body: message,
+          icon: 'App logo.jpg'
+        });
+      }
+    }
+  }
+
+  // -------------------------------------------------------------
   // 1. STATE & STORAGE
   // -------------------------------------------------------------
-  const STORAGE_KEY = "MORROW_STATE_V8";
+  const STORAGE_KEY = "MORROW_STATE_V9";
 
   const defaultState = {
     user: {
@@ -222,7 +272,7 @@
   }
 
   // -------------------------------------------------------------
-  // 2. CALENDAR STREAKS
+  // 2. CALENDAR STREAK ENGINE
   // -------------------------------------------------------------
   function getTodayString() {
     return new Date().toISOString().split("T")[0];
@@ -912,6 +962,7 @@
   function renderRestoredBarGraph() {
     const container = $("#weeklyBarsContainer");
     if (!container) return;
+
     container.innerHTML = "";
 
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -991,10 +1042,10 @@
         broadcastBtn.id = "btnAdminBroadcast";
         broadcastBtn.type = "button";
         broadcastBtn.className = "admin-topbar-broadcast-btn";
-        broadcastBtn.title = "Admin: Send In-App Notification Broadcast";
+        broadcastBtn.title = "Admin: Send In-App & Push Notification";
         broadcastBtn.innerHTML = `<span>📢 Broadcast</span>`;
         broadcastBtn.addEventListener("click", () => {
-          openNotificationComposerModal(null); // Global
+          openNotificationComposerModal(null);
         });
 
         const authContainer = $("#authContainer");
@@ -1112,7 +1163,6 @@
         <div class="points-pill">• ${userPts} Pts</div>
       `;
 
-      // Clicking any user profile opens the profile view / admin stat editor
       row.addEventListener("click", () => {
         openScholarProfileModal(user);
       });
@@ -1240,7 +1290,6 @@
 
     renderAvatar($("#modalAvatarBox"), user, "64px");
 
-    // Admin save handler
     if (isOwner) {
       const btnSave = $("#admBtnSaveUser");
       if (btnSave) {
@@ -1267,7 +1316,6 @@
               lastActive: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
-            // If editing current logged in user
             if (isMe) {
               state.stats.weeklyPoints = newPts;
               state.stats.weekSeconds = Math.round(newHrs * 3600);
@@ -1276,7 +1324,6 @@
               saveLocalState();
             }
 
-            // Update in local cache
             const target = cachedLeaderboardUsers.find(u => u.uid === user.uid);
             if (target) {
               target.points = newPts;
@@ -1378,7 +1425,7 @@
     }
   }
 
-  // Real-time listener for incoming notifications
+  // Real-time listener for incoming notifications + Native OS Notifications
   function initRealtimeNotificationsListener() {
     if (!window.firebase || !firebase.apps.length) return;
     const db = firebase.firestore();
@@ -1392,13 +1439,17 @@
             const data = change.doc.data();
             const notifId = change.doc.id;
 
-            // Check if notification is targeted to all or to current user
             const isForMe = data.targetUid === "all" || (state.user.uid && data.targetUid === state.user.uid);
             const hasSeen = localStorage.getItem("morrow_seen_notif_" + notifId);
 
             if (isForMe && !hasSeen) {
               localStorage.setItem("morrow_seen_notif_" + notifId, "true");
+
+              // 1. In-App Frosted Banner
               showInAppToast(data.title, data.message, data.senderName);
+
+              // 2. Real Native Windows / Mac / Android OS System Notification
+              triggerRealOSNotification(data.title, data.message);
             }
           }
         });
@@ -1428,7 +1479,8 @@
     document.body.appendChild(toast);
     lucide.createIcons();
 
-    $("#btnToastDismiss").addEventListener("click", () => toast.remove());
+    const btnDismiss = $("#btnToastDismiss");
+    if (btnDismiss) btnDismiss.addEventListener("click", () => toast.remove());
     setTimeout(() => {
       if (toast.parentNode) toast.remove();
     }, 9000);
@@ -1693,6 +1745,7 @@
         initFirestoreRealtimeLeaderboard();
         initRealtimeNotificationsListener();
         initClassoreLeagues();
+        initSystemNotifications(); // Requests native browser/phone system notification permissions
 
         await hydrateUserFromCloud(user.uid);
       } else {
