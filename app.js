@@ -1,11 +1,9 @@
 /**
  * MORROW — Deep Focus Engine
- * - Rankings calculated strictly by Focus Hours (Weekly, Daily Sprint, All-Time)
- * - Tiers dynamically assigned by study hours: Bronze, Silver, Gold, Diamond, Morrow Elite
- * - Super Admin Controls & Broadcasts for gethminahalangoda@gmail.com
- * - Native OS/Phone Push Notifications (Service Worker)
- * - Cloud-First Hydration on 'users' collection (No data overwrites)
- * - Background Lock-Screen Delta Timer & Calendar Streaks
+ * - Rankings strictly by Points System (Weekly, Daily Sprint, All-Time Hall of Fame)
+ * - Live "Studying Now 🟢" indicator badge on Ranking tab when timer is active
+ * - Ambient White Noise Synthesizer Widget
+ * - Super Admin Privileges for gethminahalangoda@gmail.com with Profile Editor & Notifications
  */
 
 (() => {
@@ -29,17 +27,15 @@
     return user.isPremium === true;
   }
 
-  // Tiers assigned strictly by focus hours
-  function getTierForHours(hours) {
-    const h = Number(hours) || 0;
-    if (h >= 50) return { name: "Morrow Elite", color: "#ec4899", bg: "rgba(236, 72, 153, 0.16)", icon: "👑" };
-    if (h >= 35) return { name: "Diamond", color: "#00f2fe", bg: "rgba(0, 242, 254, 0.16)", icon: "💎" };
-    if (h >= 20) return { name: "Gold", color: "#ffd700", bg: "rgba(255, 215, 0, 0.16)", icon: "🥇" };
-    if (h >= 10) return { name: "Silver", color: "#c0c0c0", bg: "rgba(192, 192, 192, 0.16)", icon: "🥈" };
+  function getTierForPoints(pts) {
+    const p = Number(pts) || 0;
+    if (p >= 5000) return { name: "Morrow Elite", color: "#ec4899", bg: "rgba(236, 72, 153, 0.16)", icon: "👑" };
+    if (p >= 2500) return { name: "Diamond", color: "#00f2fe", bg: "rgba(0, 242, 254, 0.16)", icon: "💎" };
+    if (p >= 1000) return { name: "Gold", color: "#ffd700", bg: "rgba(255, 215, 0, 0.16)", icon: "🥇" };
+    if (p >= 400) return { name: "Silver", color: "#c0c0c0", bg: "rgba(192, 192, 192, 0.16)", icon: "🥈" };
     return { name: "Bronze", color: "#cd7f32", bg: "rgba(205, 127, 50, 0.16)", icon: "🥉" };
   }
 
-  // Telegram-style Verified Blue Badge SVG
   function getVerifiedBadgeHtml(isPremium, title = "Verified Scholar") {
     if (!isPremium) return "";
     return `
@@ -52,130 +48,153 @@
     `;
   }
 
-  // Injected CSS for badges, tier tags, and notifications
   function injectDynamicStyles() {
     if ($("#morrow-dynamic-styles")) return;
     const style = document.createElement("style");
     style.id = "morrow-dynamic-styles";
     style.textContent = `
-      .tg-verified-badge {
-        display: inline-flex;
-        align-items: center;
-        vertical-align: middle;
-        margin-left: 5px;
-        flex-shrink: 0;
-      }
-      .tg-verified-badge svg {
-        filter: drop-shadow(0 0 5px rgba(36, 161, 222, 0.45));
-        transition: transform 0.2s ease;
-      }
-      .tg-verified-badge:hover svg {
-        transform: scale(1.15);
-      }
+      .tg-verified-badge { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 5px; flex-shrink: 0; }
+      .tg-verified-badge svg { filter: drop-shadow(0 0 5px rgba(36, 161, 222, 0.45)); transition: transform 0.2s ease; }
+      .tg-verified-badge:hover svg { transform: scale(1.15); }
       .tier-badge-pill {
-        font-size: 0.72rem;
-        font-weight: 800;
-        padding: 3px 8px;
-        border-radius: 6px;
-        letter-spacing: 0.02em;
-        white-space: nowrap;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        flex-shrink: 0;
+        font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;
+        letter-spacing: 0.02em; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
       }
-      .spin-clockwise {
-        animation: spinClockwise 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-      }
-      @keyframes spinClockwise {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-      .refresh-lead-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 14px;
-        font-size: 0.82rem;
-        border-radius: 999px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-      .refresh-lead-btn:hover {
-        background: var(--accent-soft);
-        border-color: var(--accent);
-      }
+      .spin-clockwise { animation: spinClockwise 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+      @keyframes spinClockwise { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      .refresh-lead-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 0.82rem; border-radius: 999px; cursor: pointer; transition: all 0.2s ease; }
+      .refresh-lead-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
       .admin-topbar-broadcast-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 14px;
-        border-radius: 999px;
+        display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
         background: linear-gradient(135deg, rgba(36, 161, 222, 0.2), rgba(202, 56, 56, 0.2));
-        border: 1px solid #24A1DE;
-        color: #eef0f6;
-        font-size: 0.82rem;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.2s ease;
+        border: 1px solid #24A1DE; color: #eef0f6; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;
       }
-      .admin-topbar-broadcast-btn:hover {
-        transform: scale(1.04);
-        box-shadow: 0 0 14px rgba(36, 161, 222, 0.4);
-      }
-      .leaderboard-row {
-        cursor: pointer;
-      }
-      .admin-modal-field {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        text-align: left;
-        margin-bottom: 12px;
-      }
-      .admin-modal-field label {
-        font-size: 0.78rem;
-        color: var(--muted);
-        font-weight: 700;
-        text-transform: uppercase;
-      }
+      .admin-topbar-broadcast-btn:hover { transform: scale(1.04); box-shadow: 0 0 14px rgba(36, 161, 222, 0.4); }
+      .leaderboard-row { cursor: pointer; }
+      .admin-modal-field { display: flex; flex-direction: column; gap: 4px; text-align: left; margin-bottom: 12px; }
+      .admin-modal-field label { font-size: 0.78rem; color: var(--muted); font-weight: 700; text-transform: uppercase; }
       .admin-modal-field input, .admin-modal-field textarea, .admin-modal-field select {
-        padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid var(--line-strong);
-        background: var(--surface-raised);
-        color: var(--ink);
-        font: inherit;
-        font-size: 0.9rem;
-        outline: none;
+        padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-raised); color: var(--ink); font: inherit; font-size: 0.9rem; outline: none;
       }
-      .admin-modal-field input:focus, .admin-modal-field textarea:focus {
-        border-color: var(--accent);
-      }
+      .admin-modal-field input:focus, .admin-modal-field textarea:focus { border-color: var(--accent); }
       .in-app-toast-alert {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        max-width: 380px;
-        width: calc(100% - 40px);
-        background: var(--surface);
-        border: 1px solid #24A1DE;
-        box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(36, 161, 222, 0.35);
-        border-radius: 16px;
-        padding: 16px 18px;
-        z-index: 9999999;
-        animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+        position: fixed; top: 20px; right: 20px; max-width: 380px; width: calc(100% - 40px);
+        background: var(--surface); border: 1px solid #24A1DE; box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(36, 161, 222, 0.35);
+        border-radius: 16px; padding: 16px 18px; z-index: 9999999; animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
       }
-      @keyframes toastIn {
-        from { transform: translateY(-20px); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
+      @keyframes toastIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      .studying-now-pill {
+        display: inline-flex; align-items: center; gap: 5px; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981;
+        color: #10b981; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; animation: pulse-studying 2s infinite;
       }
+      @keyframes pulse-studying { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     `;
     document.head.appendChild(style);
   }
 
   // -------------------------------------------------------------
-  // NATIVE OS / PHONE SYSTEM NOTIFICATIONS ENGINE
+  // AMBIENT WHITE NOISE AUDIO SYNTHESIZER
+  // -------------------------------------------------------------
+  let audioCtx = null;
+  let activeNoiseNode = null;
+  let activeNoiseGain = null;
+
+  const noiseSounds = [
+    { id: "rain", name: "Rain", icon: "cloud-rain" },
+    { id: "birds", name: "Birds", icon: "feather" },
+    { id: "fire", name: "Fireplace", icon: "flame" },
+    { id: "waves", name: "Ocean Waves", icon: "waves" },
+    { id: "cafe", name: "Cafe murmur", icon: "coffee" }
+  ];
+
+  function initWhiteNoiseWidget() {
+    const grid = $("#noiseGrid");
+    const modal = $("#noiseModal");
+    const openBtn = $("#openNoiseModalBtn");
+    const closeBtn = $("#closeNoiseModalBtn");
+
+    if (!grid || !modal) return;
+    grid.innerHTML = "";
+
+    noiseSounds.forEach(snd => {
+      const item = document.createElement("div");
+      item.className = "noise-item";
+      item.dataset.sound = snd.id;
+      item.innerHTML = `
+        <i data-lucide="${snd.icon}" style="width: 24px; height: 24px;"></i>
+        <span style="font-size: 0.78rem; font-weight: 600;">${snd.name}</span>
+      `;
+      item.addEventListener("click", () => toggleNoiseSound(snd.id, item));
+      grid.appendChild(item);
+    });
+
+    if (openBtn) openBtn.addEventListener("click", () => modal.classList.add("active"));
+    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.remove("active"));
+    lucide.createIcons();
+  }
+
+  function toggleNoiseSound(soundId, element) {
+    $$(".noise-item").forEach(el => el.classList.remove("active"));
+
+    if (activeNoiseNode) {
+      activeNoiseNode.stop();
+      activeNoiseNode.disconnect();
+      activeNoiseNode = null;
+      if (activeNoiseGain) activeNoiseGain.disconnect();
+      activeNoiseGain = null;
+    }
+
+    const wasActive = element.classList.contains("active");
+    if (!wasActive) {
+      element.classList.add("active");
+      playProceduralNoise(soundId);
+    }
+  }
+
+  function playProceduralNoise(type) {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!audioCtx) audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const bufferSize = audioCtx.sampleRate * 2;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < bufferSize; i++) {
+        if (type === 'rain') {
+          data[i] = Math.random() > 0.98 ? (Math.random() * 2 - 1) * 0.8 : (Math.random() * 2 - 1) * 0.05;
+        } else if (type === 'fire') {
+          data[i] = Math.random() > 0.99 ? (Math.random() * 2 - 1) * 0.9 : (Math.random() * 2 - 1) * 0.1;
+        } else {
+          // Pink/White noise blend for waves/cafe/birds
+          data[i] = Math.random() * 2 - 1;
+        }
+      }
+
+      activeNoiseNode = audioCtx.createBufferSource();
+      activeNoiseNode.buffer = buffer;
+      activeNoiseNode.loop = true;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = type === 'rain' ? 'lowpass' : (type === 'fire' ? 'bandpass' : 'lowpass');
+      filter.frequency.value = type === 'rain' ? 1000 : (type === 'fire' ? 800 : 400);
+
+      activeNoiseGain = audioCtx.createGain();
+      activeNoiseGain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+
+      activeNoiseNode.connect(filter);
+      filter.connect(activeNoiseGain);
+      activeNoiseGain.connect(audioCtx.destination);
+
+      activeNoiseNode.start();
+    } catch (e) {
+      console.warn("Web audio notice:", e);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // NATIVE OS / PHONE SYSTEM NOTIFICATIONS
   // -------------------------------------------------------------
   async function initSystemNotifications() {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
@@ -184,9 +203,7 @@
       if (Notification.permission === 'default') {
         await Notification.requestPermission();
       }
-    } catch (err) {
-      console.warn("Service worker registration notice:", err);
-    }
+    } catch (err) {}
   }
 
   async function triggerRealOSNotification(title, message) {
@@ -198,15 +215,10 @@
           body: message,
           icon: 'App logo.jpg',
           badge: 'App logo.jpg',
-          vibrate: [200, 100, 200],
-          tag: 'morrow-notif-' + Date.now(),
-          renotify: true
+          vibrate: [200, 100, 200]
         });
       } catch (e) {
-        new Notification(title, {
-          body: message,
-          icon: 'App logo.jpg'
-        });
+        new Notification(title, { body: message, icon: 'App logo.jpg' });
       }
     }
   }
@@ -214,7 +226,7 @@
   // -------------------------------------------------------------
   // 1. STATE & STORAGE
   // -------------------------------------------------------------
-  const STORAGE_KEY = "MORROW_STATE_V10";
+  const STORAGE_KEY = "MORROW_STATE_V11";
 
   const defaultState = {
     user: {
@@ -402,9 +414,7 @@
     timerWorker.onmessage = () => {
       if (timerRunning) onTimerTick();
     };
-  } catch (err) {
-    console.warn("Background worker fallback active.");
-  }
+  } catch (err) {}
 
   async function requestWakeLock() {
     try {
@@ -460,7 +470,7 @@
         if (!state.user.uid) {
           showModal(
             "Sign in to start focusing",
-            "Please sign in with your Google account to record study time, keep your streak alive, and rank globally by hours.",
+            "Please sign in with your Google account to record study time, keep your streak alive, and rank globally on points.",
             [
               {
                 label: "Sign In with Google",
@@ -642,7 +652,7 @@
 
   function commitSessionVerification() {
     if (pendingSession.seconds < 15) {
-      showModal("Session Too Short", "Study at least 1 minute to earn verified hours and points.", [
+      showModal("Session Too Short", "Study at least 1 minute to earn verified points.", [
         { label: "OK", action: closeModal }
       ]);
       return;
@@ -670,7 +680,7 @@
     saveLocalState();
     resetTimer();
 
-    showModal("Session Saved!", `Logged +${(minutes / 60).toFixed(2)}h and +${earnedPoints} pts! Your rank and tier have updated.`, [
+    showModal("Points Claimed!", `You earned +${earnedPoints} pts! Your global points rank has been updated.`, [
       { label: "Awesome", action: closeModal }
     ]);
 
@@ -942,7 +952,7 @@
   window.addEventListener("pagehide", clearCompletedTasks);
 
   // -------------------------------------------------------------
-  // 8. PROGRESS TAB & ANIMATED BAR GRAPH
+  // 8. PROGRESS TAB & BAR GRAPH
   // -------------------------------------------------------------
   function renderProgressTab() {
     const todayHrs = state.stats.todaySeconds / 3600;
@@ -1002,7 +1012,7 @@
   }
 
   // -------------------------------------------------------------
-  // 9. CLASSORE LEADERBOARD (HOURS RANKING & TIERS)
+  // 9. CLASSORE LEADERBOARD (RANKING STRICTLY BY POINTS & TIERS)
   // -------------------------------------------------------------
   let currentLeague = "weekly";
   let cachedLeaderboardUsers = [];
@@ -1090,15 +1100,13 @@
     }
   }
 
-  // Extracts focus hours based on active league
-  function extractUserHours(user, league) {
+  function extractUserPoints(user, league) {
     if (league === "daily") {
-      return (user.todaySeconds ? user.todaySeconds / 3600 : (user.dailyHours || 0));
+      return user.dailyPoints ?? user.points ?? 0;
     } else if (league === "alltime") {
-      return (user.totalSeconds ? user.totalSeconds / 3600 : (user.totalStudyTime ? user.totalStudyTime / 60 : (user.allTimeHours || 0)));
+      return user.allTimePoints ?? user.points ?? user.weeklyPoints ?? 0;
     } else {
-      // Weekly (default)
-      return (user.weeklyHours ?? (user.weekSeconds ? user.weekSeconds / 3600 : (user.totalStudyTime ? user.totalStudyTime / 60 : 0)));
+      return user.weeklyPoints ?? user.points ?? user.allTimePoints ?? 0;
     }
   }
 
@@ -1116,12 +1124,12 @@
         displayName: state.user.displayName,
         avatar: state.user.avatar,
         bio: state.user.bio || "Local Scholar",
-        weeklyHours: state.stats.weekSeconds / 3600,
-        weekSeconds: state.stats.weekSeconds,
-        todaySeconds: state.stats.todaySeconds,
-        totalSeconds: state.stats.totalSeconds,
         points: state.stats.weeklyPoints,
+        dailyPoints: state.stats.dailyPoints,
+        weeklyPoints: state.stats.weeklyPoints,
+        allTimePoints: state.stats.allTimePoints,
         streak: state.streak.count,
+        weeklyHours: state.stats.weekSeconds / 3600,
         isPremium: isUserPremium(state.user)
       });
     }
@@ -1130,25 +1138,25 @@
       fullList = fullList.filter(u => u.activeSubject === currentSubjectFilter || true);
     }
 
-    // RANK STRICTLY BY HOURS
-    fullList.sort((a, b) => extractUserHours(b, currentLeague) - extractUserHours(a, currentLeague));
+    // RANK STRICTLY BY POINTS
+    fullList.sort((a, b) => extractUserPoints(b, currentLeague) - extractUserPoints(a, currentLeague));
 
     let myRank = -1;
-    let hoursBehind = 0;
+    let pointsBehind = 0;
     let personAboveName = "";
 
     fullList.forEach((user, idx) => {
       const rank = idx + 1;
       const isMe = user.uid === (state.user.uid || "local_me");
-      const userHours = extractUserHours(user, currentLeague);
-      const userTier = getTierForHours(userHours);
+      const userPts = extractUserPoints(user, currentLeague);
+      const userTier = getTierForPoints(userPts);
       const userIsVerified = isUserPremium(user);
 
       if (isMe) {
         myRank = rank;
         if (idx > 0) {
           const aboveUser = fullList[idx - 1];
-          hoursBehind = extractUserHours(aboveUser, currentLeague) - userHours;
+          pointsBehind = extractUserPoints(aboveUser, currentLeague) - userPts;
           personAboveName = aboveUser.displayName || `#${rank - 1}`;
         }
       }
@@ -1161,6 +1169,12 @@
       else if (rank === 2) rankHtml = `<span class="badge-silver">★ 2</span>`;
       else if (rank === 3) rankHtml = `<span class="badge-bronze">★ 3</span>`;
 
+      // Studying Now Indicator Pill if timer is actively running on this user session
+      let studyingNowHtml = "";
+      if (isMe && timerRunning) {
+        studyingNowHtml = `<span class="studying-now-pill">🟢 Studying Now</span>`;
+      }
+
       row.innerHTML = `
         <div class="row-user-info">
           <div class="rank-badge-wrap">${rankHtml}</div>
@@ -1172,11 +1186,12 @@
               <span class="tier-badge-pill" style="color: ${userTier.color}; background: ${userTier.bg}; border: 1px solid ${userTier.color}44;">
                 ${userTier.icon} ${userTier.name}
               </span>
+              ${studyingNowHtml}
             </div>
             <div class="user-sub-location">${user.bio || "Scholar"}</div>
           </div>
         </div>
-        <div class="points-pill" style="font-weight: 800;">• ${userHours.toFixed(1)} hrs</div>
+        <div class="points-pill">• ${userPts} Pts</div>
       `;
 
       row.addEventListener("click", () => {
@@ -1187,11 +1202,11 @@
       renderAvatar($(`#classoreRowAv_${rank}`), user, "38px");
     });
 
-    // Right Column Card Update
     const cardName = $("#classoreUserName");
-    const userHours = extractUserHours(state.user, currentLeague) || (state.stats.weekSeconds / 3600);
-    const myTier = getTierForHours(userHours);
+    const userPts = extractUserPoints(state.user, currentLeague);
+    const myTier = getTierForPoints(userPts);
     const userIsVerified = isUserPremium(state.user);
+    const studyingBadgeMe = timerRunning ? `<div style="margin-top: 4px;"><span class="studying-now-pill">🟢 Studying Now</span></div>` : "";
 
     if (cardName) {
       cardName.innerHTML = `
@@ -1204,6 +1219,7 @@
             ${myTier.icon} ${myTier.name} Tier
           </span>
         </div>
+        ${studyingBadgeMe}
       `;
     }
 
@@ -1218,17 +1234,17 @@
 
     if (tRank) tRank.textContent = myRank > 0 ? `#${myRank}` : "--";
     if (tStreak) tStreak.textContent = state.streak.count;
-    if (tPoints) tPoints.textContent = `${myTier.name}`; // Prominently display tier in tile
-    if (tTime) tTime.textContent = `${userHours.toFixed(1)}h`;
+    if (tPoints) tPoints.textContent = userPts;
+    if (tTime) tTime.textContent = `${(state.stats.weekSeconds / 3600).toFixed(1)}h`;
 
     const banner = $("#classoreRelativeBanner");
     if (banner) {
       if (myRank === 1) {
-        banner.textContent = `🏆 You are #1 with ${userHours.toFixed(1)} hrs completed!`;
+        banner.textContent = `🏆 You are #1 on the leaderboard with ${userPts} pts!`;
       } else if (myRank > 1) {
-        banner.textContent = `You are #${myRank} (${userHours.toFixed(1)}h) — ${hoursBehind.toFixed(1)}h behind ${personAboveName}`;
+        banner.textContent = `You are #${myRank} (${userPts} pts) — ${pointsBehind} pts behind ${personAboveName}`;
       } else {
-        banner.textContent = "Complete a focus session to rank on the leaderboard.";
+        banner.textContent = "Complete a focus session to earn points and rank globally.";
       }
     }
   }
@@ -1240,10 +1256,10 @@
     const isMe = user.uid === state.user.uid;
     const isOwner = isSuperAdmin(state.user.email);
     const verified = isUserPremium(user);
-    const weeklyHours = extractUserHours(user, "weekly");
-    const weeklyPts = user.weeklyPoints ?? user.points ?? 0;
+    const weeklyPts = extractUserPoints(user, "weekly");
+    const weeklyHours = user.weeklyHours ?? ((user.totalStudyTime || 0) / 60) ?? 0;
     const streak = user.streak ?? 0;
-    const tier = getTierForHours(weeklyHours);
+    const tier = getTierForPoints(weeklyPts);
 
     let adminFormHtml = "";
     if (isOwner) {
@@ -1256,8 +1272,8 @@
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="admin-modal-field">
-              <label>Weekly Hours</label>
-              <input type="number" step="0.1" id="admEditHours" value="${weeklyHours.toFixed(1)}">
+              <label>Weekly Points</label>
+              <input type="number" id="admEditPoints" value="${weeklyPts}">
             </div>
             <div class="admin-modal-field">
               <label>Streak (Days)</label>
@@ -1267,8 +1283,8 @@
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="admin-modal-field">
-              <label>Weekly Points</label>
-              <input type="number" id="admEditPoints" value="${weeklyPts}">
+              <label>Weekly Hours</label>
+              <input type="number" step="0.1" id="admEditHours" value="${weeklyHours.toFixed(1)}">
             </div>
             <div class="admin-modal-field">
               <label>Verified / Premium</label>
@@ -1302,16 +1318,16 @@
 
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%;">
           <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
+            <div style="font-size: 0.75rem; color: var(--muted);">Points</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #10b981;">${weeklyPts}</div>
+          </div>
+          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
             <div style="font-size: 0.75rem; color: var(--muted);">Focus</div>
             <div style="font-size: 1.15rem; font-weight: 800; color: var(--accent);">${weeklyHours.toFixed(1)}h</div>
           </div>
           <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
             <div style="font-size: 0.75rem; color: var(--muted);">Streak</div>
             <div style="font-size: 1.15rem; font-weight: 800; color: var(--flame);">${streak}d</div>
-          </div>
-          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
-            <div style="font-size: 0.75rem; color: var(--muted);">Points</div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: #10b981;">${weeklyPts}</div>
           </div>
         </div>
 
@@ -1329,9 +1345,9 @@
       const btnSave = $("#admBtnSaveUser");
       if (btnSave) {
         btnSave.addEventListener("click", async () => {
-          const newHrs = parseFloat($("#admEditHours").value) || 0;
           const newPts = parseInt($("#admEditPoints").value) || 0;
           const newStreak = parseInt($("#admEditStreak").value) || 0;
+          const newHrs = parseFloat($("#admEditHours").value) || 0;
           const newVerified = $("#admEditVerified").value === "true";
 
           btnSave.textContent = "Saving...";
@@ -1339,33 +1355,31 @@
 
           try {
             await db.collection("users").doc(user.uid).set({
-              weeklyHours: newHrs,
-              totalStudyTime: Math.round(newHrs * 60),
-              totalSeconds: Math.round(newHrs * 3600),
-              weekSeconds: Math.round(newHrs * 3600),
               points: newPts,
               weeklyPoints: newPts,
               allTimePoints: newPts,
+              dailyPoints: newPts,
               streak: newStreak,
+              weeklyHours: newHrs,
+              totalStudyTime: Math.round(newHrs * 60),
               isPremium: newVerified,
               lastActive: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
             if (isMe) {
-              state.stats.weekSeconds = Math.round(newHrs * 3600);
               state.stats.weeklyPoints = newPts;
               state.streak.count = newStreak;
+              state.stats.weekSeconds = Math.round(newHrs * 3600);
               state.user.isPremium = newVerified;
               saveLocalState();
             }
 
             const target = cachedLeaderboardUsers.find(u => u.uid === user.uid);
             if (target) {
-              target.weeklyHours = newHrs;
-              target.weekSeconds = Math.round(newHrs * 3600);
-              target.totalSeconds = Math.round(newHrs * 3600);
               target.points = newPts;
+              target.weeklyPoints = newPts;
               target.streak = newStreak;
+              target.weeklyHours = newHrs;
               target.isPremium = newVerified;
             }
 
@@ -1536,11 +1550,11 @@
           displayName: data.displayName || "Scholar",
           avatar: data.avatar || null,
           bio: data.bio || "Scholar",
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? ((data.weekSeconds || 0) / 3600) ?? 0,
-          todaySeconds: data.todaySeconds || 0,
-          totalSeconds: data.totalSeconds || ((data.totalStudyTime || 0) * 60) || 0,
-          weekSeconds: data.weekSeconds || Math.round((data.weeklyHours || 0) * 3600) || 0,
           points: data.points ?? data.weeklyPoints ?? 0,
+          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
+          dailyPoints: data.dailyPoints ?? data.points ?? 0,
+          allTimePoints: data.allTimePoints ?? data.points ?? 0,
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
           streak: data.streak || 0,
           isPremium: isSuperAdmin(userEmail) || data.isPremium === true
         });
@@ -1559,11 +1573,11 @@
           displayName: data.displayName || "Scholar",
           avatar: data.avatar || null,
           bio: data.bio || "Scholar",
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? ((data.weekSeconds || 0) / 3600) ?? 0,
-          todaySeconds: data.todaySeconds || 0,
-          totalSeconds: data.totalSeconds || ((data.totalStudyTime || 0) * 60) || 0,
-          weekSeconds: data.weekSeconds || Math.round((data.weeklyHours || 0) * 3600) || 0,
           points: data.points ?? data.weeklyPoints ?? 0,
+          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
+          dailyPoints: data.dailyPoints ?? data.points ?? 0,
+          allTimePoints: data.allTimePoints ?? data.points ?? 0,
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
           streak: data.streak || 0,
           isPremium: isSuperAdmin(userEmail) || data.isPremium === true
         });
@@ -1656,7 +1670,7 @@
           state.user.isPremium = true;
         }
 
-        console.log(`[MORROW] Hydrated user from cloud: ${(state.stats.weekSeconds / 3600).toFixed(1)} hrs, ${state.streak.count} day streak.`);
+        console.log(`[MORROW] Hydrated user state from cloud: ${state.stats.weeklyPoints} pts, ${state.streak.count} day streak.`);
       }
 
       isCloudHydrated = true;
@@ -1726,11 +1740,11 @@
           displayName: data.displayName || "Scholar",
           avatar: data.avatar || null,
           bio: data.bio || "Scholar",
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? ((data.weekSeconds || 0) / 3600) ?? 0,
-          todaySeconds: data.todaySeconds || 0,
-          totalSeconds: data.totalSeconds || ((data.totalStudyTime || 0) * 60) || 0,
-          weekSeconds: data.weekSeconds || Math.round((data.weeklyHours || 0) * 3600) || 0,
           points: data.points ?? data.weeklyPoints ?? 0,
+          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
+          dailyPoints: data.dailyPoints ?? data.points ?? 0,
+          allTimePoints: data.allTimePoints ?? data.points ?? 0,
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
           streak: data.streak || 0,
           isPremium: isSuperAdmin(userEmail) || data.isPremium === true
         });
@@ -1904,9 +1918,6 @@
 
   function renderUserProfile() {
     const isVerified = isUserPremium(state.user);
-    const userHours = extractUserHours(state.user, "weekly");
-    const tier = getTierForHours(userHours);
-
     const sideName = $("#sideUserName");
     if (sideName) {
       sideName.innerHTML = `<span>${state.user.displayName}</span> ${getVerifiedBadgeHtml(isVerified)}`;
@@ -1956,7 +1967,7 @@
   }
 
   // -------------------------------------------------------------
-  // 16. TABS NAVIGATION & INDICATORS
+  // 16. TABS NAVIGATION & LIQUID GLASS INDICATORS
   // -------------------------------------------------------------
   const navIndicator = $("#navIndicator");
   const tabs = $$(".tab");
@@ -2015,6 +2026,7 @@
   applyTheme(state.settings.theme);
   applyAccentColor(state.subjects[0]?.color || "#ca3838");
   initTimer();
+  initWhiteNoiseWidget();
   renderStreakWeek();
   renderTasks();
   initClassoreLeagues();
