@@ -97,7 +97,7 @@ button { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 [hidden] { display: none !important; }
 
-.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; position: relative; }
 
 /* Sidebar */
 .sidebar {
@@ -105,9 +105,9 @@ button { font: inherit; color: inherit; }
   padding: 24px 16px;
   border-right: 1px solid var(--line);
   display: flex; flex-direction: column; justify-content: space-between;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   z-index: 20;
 }
 .brand { display: flex; align-items: center; gap: 12px; padding: 0 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -.02em; }
@@ -173,12 +173,14 @@ main {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 1;
 }
 .panel { flex: 1; animation: panel-in .25s ease both; }
-@keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes panel-in { from { opacity: 0; } to { opacity: 1; } }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 24px; flex-wrap: wrap; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 24px; flex-wrap: wrap; position: relative; z-index: 2; }
 .topbar h1 { margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -.025em; }
 
 .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -227,54 +229,57 @@ main {
 @keyframes fx-ripple { to { transform: scale(1); opacity: 0; } }
 
 /* ============================================================
-   TIMER TAB — LAG-FREE BACKGROUND IMAGES
+   TIMER TAB — FULLSCREEN SUBTLE BLUR BACKGROUND
    ============================================================ */
 #panel-timer {
   position: relative;
-  isolation: isolate;
-  border-radius: var(--radius);
-  overflow: hidden;
   padding: 8px 0;
 }
 
-/* Background image layer (smooth and GPU-accelerated) */
+/* Fullscreen Background Layer (Spans 100vw x 100vh) */
 .timer-bg-container {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
 }
 .timer-bg-img {
   position: absolute;
-  inset: -20px;
+  inset: -15px; /* Slight offset prevents blur edge borders */
   background-size: cover;
   background-position: center;
-  filter: blur(28px);
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
+  background-repeat: no-repeat;
+  filter: blur(7px); /* Subtly lowered blur to recognize the image clearly */
+  transform: translate3d(0, 0, 0) scale(1.03);
+  will-change: transform, opacity;
   opacity: 0;
   transition: opacity 0.4s ease;
 }
 [data-theme="light"] .timer-bg-light {
   background-image: url('bg-light.jpg');
-  opacity: 0.35;
-  filter: blur(24px) brightness(1.05);
+  opacity: 0.55;
+  filter: blur(6px) brightness(1.02);
 }
 :root:not([data-theme="light"]) .timer-bg-dark {
   background-image: url('bg-dark.jpg');
-  opacity: 0.45;
-  filter: blur(24px) brightness(0.65);
+  opacity: 0.65;
+  filter: blur(6px) brightness(0.85);
 }
 .timer-bg-overlay {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  background: radial-gradient(circle at center, rgba(15, 17, 23, 0.4) 0%, rgba(15, 17, 23, 0.72) 100%);
+}
+[data-theme="light"] .timer-bg-overlay {
+  background: radial-gradient(circle at center, rgba(244, 245, 248, 0.35) 0%, rgba(244, 245, 248, 0.68) 100%);
 }
 
 .timer-wrap {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -416,7 +421,6 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .stat span { display: block; font-size: .88rem; color: var(--muted); }
 .stat strong { display: block; margin-top: 4px; font-size: 1.8rem; font-weight: 800; letter-spacing: -.02em; }
 
-/* The classic column bar graph from focus-template.html */
 .chart { padding: 22px; position: relative; }
 .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
 .chart h2, .goal h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
@@ -664,7 +668,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
 .modal-overlay.active .modal-card { transform: scale(1); }
 .modal-icon { width: 50px; height: 50px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin: 0 auto 16px; }
 
-/* Responsive Adjustments (Fixes Mobile Squish) */
+/* Responsive Adjustments */
 @media (max-width: 860px) {
   .classore-grid { grid-template-columns: 1fr; }
 }
@@ -756,9 +760,9 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
       </div>
     </header>
 
-    <!-- ---------- TAB 1: TIMER (Stopwatch First + Lag-Free Background) ---------- -->
+    <!-- ---------- TAB 1: TIMER (Fullscreen Background Layer) ---------- -->
     <section class="panel" id="panel-timer" role="tabpanel">
-      <!-- Lag-free Hardware-Accelerated Background Images -->
+      <!-- Fullscreen Hardware-Accelerated Background -->
       <div class="timer-bg-container" aria-hidden="true">
         <div class="timer-bg-img timer-bg-light"></div>
         <div class="timer-bg-img timer-bg-dark"></div>
@@ -846,7 +850,7 @@ select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
       <p style="font-size: .84rem; color: var(--muted); margin-top: 14px;">Finished tasks are automatically cleared once your tab closes.</p>
     </section>
 
-    <!-- ---------- TAB 3: PROGRESS (Restored Bar Graph with Animations) ---------- -->
+    <!-- ---------- TAB 3: PROGRESS (Restored Column Bar Graph with Animations) ---------- -->
     <section class="panel" id="panel-progress" role="tabpanel" hidden>
       <div class="stats">
         <div class="stat card"><span>Focused today</span><strong id="statToday">0h 0m</strong></div>
