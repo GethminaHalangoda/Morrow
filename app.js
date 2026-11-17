@@ -1,14 +1,11 @@
 /**
  * MORROW — Deep Focus Engine
- * Includes:
- * - Native OS/Phone System Notifications (Windows, Mac, Android) via Service Worker
- * - Super Admin Controls for gethminahalangoda@gmail.com (Broadcasts, 1-on-1 messaging, Stat editing)
- * - Telegram-style Verified Blue Badges
- * - Cloud-First Firestore Hydration (Eliminates 0-point overwrites)
- * - Background Lock-Screen Timer (Web Worker + WakeLock + Timestamp Delta)
- * - Accurate Calendar Streak System
- * - Classore Leaderboard with Live Server Refresh
- * - Restored Animated Bar Graph
+ * - Rankings calculated strictly by Focus Hours (Weekly, Daily Sprint, All-Time)
+ * - Tiers dynamically assigned by study hours: Bronze, Silver, Gold, Diamond, Morrow Elite
+ * - Super Admin Controls & Broadcasts for gethminahalangoda@gmail.com
+ * - Native OS/Phone Push Notifications (Service Worker)
+ * - Cloud-First Hydration on 'users' collection (No data overwrites)
+ * - Background Lock-Screen Delta Timer & Calendar Streaks
  */
 
 (() => {
@@ -18,7 +15,7 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   // -------------------------------------------------------------
-  // 0. ADMIN IDENTIFICATION & PERMISSIONS
+  // 0. ADMIN & TIERS CONFIGURATION
   // -------------------------------------------------------------
   const SUPER_ADMIN_EMAIL = "gethminahalangoda@gmail.com";
 
@@ -30,6 +27,16 @@
     if (!user) return false;
     if (isSuperAdmin(user.email)) return true;
     return user.isPremium === true;
+  }
+
+  // Tiers assigned strictly by focus hours
+  function getTierForHours(hours) {
+    const h = Number(hours) || 0;
+    if (h >= 50) return { name: "Morrow Elite", color: "#ec4899", bg: "rgba(236, 72, 153, 0.16)", icon: "👑" };
+    if (h >= 35) return { name: "Diamond", color: "#00f2fe", bg: "rgba(0, 242, 254, 0.16)", icon: "💎" };
+    if (h >= 20) return { name: "Gold", color: "#ffd700", bg: "rgba(255, 215, 0, 0.16)", icon: "🥇" };
+    if (h >= 10) return { name: "Silver", color: "#c0c0c0", bg: "rgba(192, 192, 192, 0.16)", icon: "🥈" };
+    return { name: "Bronze", color: "#cd7f32", bg: "rgba(205, 127, 50, 0.16)", icon: "🥉" };
   }
 
   // Telegram-style Verified Blue Badge SVG
@@ -45,7 +52,7 @@
     `;
   }
 
-  // Dynamically inject styles for admin badges, editor, and notifications
+  // Injected CSS for badges, tier tags, and notifications
   function injectDynamicStyles() {
     if ($("#morrow-dynamic-styles")) return;
     const style = document.createElement("style");
@@ -64,6 +71,18 @@
       }
       .tg-verified-badge:hover svg {
         transform: scale(1.15);
+      }
+      .tier-badge-pill {
+        font-size: 0.72rem;
+        font-weight: 800;
+        padding: 3px 8px;
+        border-radius: 6px;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
       }
       .spin-clockwise {
         animation: spinClockwise 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -159,26 +178,19 @@
   // NATIVE OS / PHONE SYSTEM NOTIFICATIONS ENGINE
   // -------------------------------------------------------------
   async function initSystemNotifications() {
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      console.warn("System notifications are not supported by this browser.");
-      return;
-    }
-
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
     try {
       await navigator.serviceWorker.register('sw.js');
-      console.log("[MORROW] Service Worker registered for system notifications.");
-
       if (Notification.permission === 'default') {
         await Notification.requestPermission();
       }
     } catch (err) {
-      console.warn("Service worker registration error:", err);
+      console.warn("Service worker registration notice:", err);
     }
   }
 
   async function triggerRealOSNotification(title, message) {
     if (!('Notification' in window)) return;
-
     if (Notification.permission === 'granted') {
       try {
         const reg = await navigator.serviceWorker.ready;
@@ -202,7 +214,7 @@
   // -------------------------------------------------------------
   // 1. STATE & STORAGE
   // -------------------------------------------------------------
-  const STORAGE_KEY = "MORROW_STATE_V9";
+  const STORAGE_KEY = "MORROW_STATE_V10";
 
   const defaultState = {
     user: {
@@ -448,7 +460,7 @@
         if (!state.user.uid) {
           showModal(
             "Sign in to start focusing",
-            "Please sign in with your Google account to record study time, keep your streak alive, and sync your points.",
+            "Please sign in with your Google account to record study time, keep your streak alive, and rank globally by hours.",
             [
               {
                 label: "Sign In with Google",
@@ -630,7 +642,7 @@
 
   function commitSessionVerification() {
     if (pendingSession.seconds < 15) {
-      showModal("Session Too Short", "Study at least 1 minute to earn verified points.", [
+      showModal("Session Too Short", "Study at least 1 minute to earn verified hours and points.", [
         { label: "OK", action: closeModal }
       ]);
       return;
@@ -658,7 +670,7 @@
     saveLocalState();
     resetTimer();
 
-    showModal("Points Claimed!", `You earned +${earnedPoints} pts! Your global ranking is updated.`, [
+    showModal("Session Saved!", `Logged +${(minutes / 60).toFixed(2)}h and +${earnedPoints} pts! Your rank and tier have updated.`, [
       { label: "Awesome", action: closeModal }
     ]);
 
@@ -930,7 +942,7 @@
   window.addEventListener("pagehide", clearCompletedTasks);
 
   // -------------------------------------------------------------
-  // 8. PROGRESS TAB & EXACT ANIMATED BAR GRAPH
+  // 8. PROGRESS TAB & ANIMATED BAR GRAPH
   // -------------------------------------------------------------
   function renderProgressTab() {
     const todayHrs = state.stats.todaySeconds / 3600;
@@ -962,7 +974,6 @@
   function renderRestoredBarGraph() {
     const container = $("#weeklyBarsContainer");
     if (!container) return;
-
     container.innerHTML = "";
 
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -991,7 +1002,7 @@
   }
 
   // -------------------------------------------------------------
-  // 9. CLASSORE LEADERBOARD & INTERACTIVE PROFILE / EDIT MODAL
+  // 9. CLASSORE LEADERBOARD (HOURS RANKING & TIERS)
   // -------------------------------------------------------------
   let currentLeague = "weekly";
   let cachedLeaderboardUsers = [];
@@ -1008,7 +1019,6 @@
 
     const filterBar = $(".classore-filter-bar");
     if (filterBar) {
-      // 1. Refresh Button
       let refreshBtn = $("#btnRefreshLeaderboard");
       if (!refreshBtn) {
         refreshBtn = document.createElement("button");
@@ -1035,7 +1045,6 @@
         });
       }
 
-      // 2. Admin Broadcast Button (Only visible to gethminahalangoda@gmail.com)
       let broadcastBtn = $("#btnAdminBroadcast");
       if (state.user.isAdmin && !broadcastBtn) {
         broadcastBtn = document.createElement("button");
@@ -1081,13 +1090,15 @@
     }
   }
 
-  function extractUserPoints(user, league) {
+  // Extracts focus hours based on active league
+  function extractUserHours(user, league) {
     if (league === "daily") {
-      return user.dailyPoints ?? user.points ?? 0;
+      return (user.todaySeconds ? user.todaySeconds / 3600 : (user.dailyHours || 0));
     } else if (league === "alltime") {
-      return user.allTimePoints ?? user.points ?? user.weeklyPoints ?? 0;
+      return (user.totalSeconds ? user.totalSeconds / 3600 : (user.totalStudyTime ? user.totalStudyTime / 60 : (user.allTimeHours || 0)));
     } else {
-      return user.weeklyPoints ?? user.points ?? user.allTimePoints ?? 0;
+      // Weekly (default)
+      return (user.weeklyHours ?? (user.weekSeconds ? user.weekSeconds / 3600 : (user.totalStudyTime ? user.totalStudyTime / 60 : 0)));
     }
   }
 
@@ -1105,12 +1116,12 @@
         displayName: state.user.displayName,
         avatar: state.user.avatar,
         bio: state.user.bio || "Local Scholar",
-        points: state.stats.weeklyPoints,
-        dailyPoints: state.stats.dailyPoints,
-        weeklyPoints: state.stats.weeklyPoints,
-        allTimePoints: state.stats.allTimePoints,
-        streak: state.streak.count,
         weeklyHours: state.stats.weekSeconds / 3600,
+        weekSeconds: state.stats.weekSeconds,
+        todaySeconds: state.stats.todaySeconds,
+        totalSeconds: state.stats.totalSeconds,
+        points: state.stats.weeklyPoints,
+        streak: state.streak.count,
         isPremium: isUserPremium(state.user)
       });
     }
@@ -1119,23 +1130,25 @@
       fullList = fullList.filter(u => u.activeSubject === currentSubjectFilter || true);
     }
 
-    fullList.sort((a, b) => extractUserPoints(b, currentLeague) - extractUserPoints(a, currentLeague));
+    // RANK STRICTLY BY HOURS
+    fullList.sort((a, b) => extractUserHours(b, currentLeague) - extractUserHours(a, currentLeague));
 
     let myRank = -1;
-    let pointsBehind = 0;
+    let hoursBehind = 0;
     let personAboveName = "";
 
     fullList.forEach((user, idx) => {
       const rank = idx + 1;
       const isMe = user.uid === (state.user.uid || "local_me");
-      const userPts = extractUserPoints(user, currentLeague);
+      const userHours = extractUserHours(user, currentLeague);
+      const userTier = getTierForHours(userHours);
       const userIsVerified = isUserPremium(user);
 
       if (isMe) {
         myRank = rank;
         if (idx > 0) {
           const aboveUser = fullList[idx - 1];
-          pointsBehind = extractUserPoints(aboveUser, currentLeague) - userPts;
+          hoursBehind = extractUserHours(aboveUser, currentLeague) - userHours;
           personAboveName = aboveUser.displayName || `#${rank - 1}`;
         }
       }
@@ -1153,14 +1166,17 @@
           <div class="rank-badge-wrap">${rankHtml}</div>
           <div class="user-row-avatar" id="classoreRowAv_${rank}"></div>
           <div style="min-width:0; flex:1;">
-            <div class="user-name-title">
+            <div class="user-name-title" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
               <span>${user.displayName || "Scholar"} ${isMe ? "(You)" : ""}</span>
               ${getVerifiedBadgeHtml(userIsVerified)}
+              <span class="tier-badge-pill" style="color: ${userTier.color}; background: ${userTier.bg}; border: 1px solid ${userTier.color}44;">
+                ${userTier.icon} ${userTier.name}
+              </span>
             </div>
             <div class="user-sub-location">${user.bio || "Scholar"}</div>
           </div>
         </div>
-        <div class="points-pill">• ${userPts} Pts</div>
+        <div class="points-pill" style="font-weight: 800;">• ${userHours.toFixed(1)} hrs</div>
       `;
 
       row.addEventListener("click", () => {
@@ -1171,10 +1187,24 @@
       renderAvatar($(`#classoreRowAv_${rank}`), user, "38px");
     });
 
+    // Right Column Card Update
     const cardName = $("#classoreUserName");
+    const userHours = extractUserHours(state.user, currentLeague) || (state.stats.weekSeconds / 3600);
+    const myTier = getTierForHours(userHours);
     const userIsVerified = isUserPremium(state.user);
+
     if (cardName) {
-      cardName.innerHTML = `<span>${state.user.displayName} (You)</span> ${getVerifiedBadgeHtml(userIsVerified)}`;
+      cardName.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;">
+          <span>${state.user.displayName} (You)</span>
+          ${getVerifiedBadgeHtml(userIsVerified)}
+        </div>
+        <div style="margin-top: 4px;">
+          <span class="tier-badge-pill" style="color: ${myTier.color}; background: ${myTier.bg}; border: 1px solid ${myTier.color}44;">
+            ${myTier.icon} ${myTier.name} Tier
+          </span>
+        </div>
+      `;
     }
 
     const cardBio = $("#classoreUserBio");
@@ -1188,31 +1218,32 @@
 
     if (tRank) tRank.textContent = myRank > 0 ? `#${myRank}` : "--";
     if (tStreak) tStreak.textContent = state.streak.count;
-    if (tPoints) tPoints.textContent = extractUserPoints(state.user, currentLeague) || state.stats.weeklyPoints;
-    if (tTime) tTime.textContent = `${(state.stats.weekSeconds / 3600).toFixed(1)}h`;
+    if (tPoints) tPoints.textContent = `${myTier.name}`; // Prominently display tier in tile
+    if (tTime) tTime.textContent = `${userHours.toFixed(1)}h`;
 
     const banner = $("#classoreRelativeBanner");
     if (banner) {
       if (myRank === 1) {
-        banner.textContent = "🏆 You are currently #1 on the leaderboard!";
+        banner.textContent = `🏆 You are #1 with ${userHours.toFixed(1)} hrs completed!`;
       } else if (myRank > 1) {
-        banner.textContent = `You are #${myRank} — ${pointsBehind} pts behind ${personAboveName}`;
+        banner.textContent = `You are #${myRank} (${userHours.toFixed(1)}h) — ${hoursBehind.toFixed(1)}h behind ${personAboveName}`;
       } else {
-        banner.textContent = "Complete a focus session to establish your standing.";
+        banner.textContent = "Complete a focus session to rank on the leaderboard.";
       }
     }
   }
 
   // -------------------------------------------------------------
-  // 10. SCHOLAR PROFILE & ADMIN STAT EDITOR MODAL
+  // 10. SCHOLAR PROFILE & ADMIN STAT EDITOR
   // -------------------------------------------------------------
   function openScholarProfileModal(user) {
     const isMe = user.uid === state.user.uid;
     const isOwner = isSuperAdmin(state.user.email);
     const verified = isUserPremium(user);
+    const weeklyHours = extractUserHours(user, "weekly");
     const weeklyPts = user.weeklyPoints ?? user.points ?? 0;
-    const weeklyHours = user.weeklyHours ?? ((user.totalStudyTime || 0) / 60) ?? 0;
     const streak = user.streak ?? 0;
+    const tier = getTierForHours(weeklyHours);
 
     let adminFormHtml = "";
     if (isOwner) {
@@ -1225,19 +1256,19 @@
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="admin-modal-field">
-              <label>Weekly Points</label>
-              <input type="number" id="admEditPoints" value="${weeklyPts}">
-            </div>
-            <div class="admin-modal-field">
               <label>Weekly Hours</label>
               <input type="number" step="0.1" id="admEditHours" value="${weeklyHours.toFixed(1)}">
+            </div>
+            <div class="admin-modal-field">
+              <label>Streak (Days)</label>
+              <input type="number" id="admEditStreak" value="${streak}">
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="admin-modal-field">
-              <label>Streak (Days)</label>
-              <input type="number" id="admEditStreak" value="${streak}">
+              <label>Weekly Points</label>
+              <input type="number" id="admEditPoints" value="${weeklyPts}">
             </div>
             <div class="admin-modal-field">
               <label>Verified / Premium</label>
@@ -1263,13 +1294,13 @@
           ${user.displayName || "Scholar"}
           ${getVerifiedBadgeHtml(verified)}
         </h3>
-        <p style="color: var(--muted); font-size: 0.85rem; margin: 4px 0 16px;">${user.bio || "Scholar of Morrow"}</p>
+        <div style="margin: 6px 0 16px;">
+          <span class="tier-badge-pill" style="color: ${tier.color}; background: ${tier.bg}; border: 1px solid ${tier.color}44;">
+            ${tier.icon} ${tier.name} Tier
+          </span>
+        </div>
 
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%;">
-          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
-            <div style="font-size: 0.75rem; color: var(--muted);">Points</div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: #10b981;">${weeklyPts}</div>
-          </div>
           <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
             <div style="font-size: 0.75rem; color: var(--muted);">Focus</div>
             <div style="font-size: 1.15rem; font-weight: 800; color: var(--accent);">${weeklyHours.toFixed(1)}h</div>
@@ -1277,6 +1308,10 @@
           <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
             <div style="font-size: 0.75rem; color: var(--muted);">Streak</div>
             <div style="font-size: 1.15rem; font-weight: 800; color: var(--flame);">${streak}d</div>
+          </div>
+          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
+            <div style="font-size: 0.75rem; color: var(--muted);">Points</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #10b981;">${weeklyPts}</div>
           </div>
         </div>
 
@@ -1294,8 +1329,8 @@
       const btnSave = $("#admBtnSaveUser");
       if (btnSave) {
         btnSave.addEventListener("click", async () => {
-          const newPts = parseInt($("#admEditPoints").value) || 0;
           const newHrs = parseFloat($("#admEditHours").value) || 0;
+          const newPts = parseInt($("#admEditPoints").value) || 0;
           const newStreak = parseInt($("#admEditStreak").value) || 0;
           const newVerified = $("#admEditVerified").value === "true";
 
@@ -1304,21 +1339,21 @@
 
           try {
             await db.collection("users").doc(user.uid).set({
-              points: newPts,
-              weeklyPoints: newPts,
-              allTimePoints: newPts,
-              dailyPoints: newPts,
               weeklyHours: newHrs,
               totalStudyTime: Math.round(newHrs * 60),
               totalSeconds: Math.round(newHrs * 3600),
+              weekSeconds: Math.round(newHrs * 3600),
+              points: newPts,
+              weeklyPoints: newPts,
+              allTimePoints: newPts,
               streak: newStreak,
               isPremium: newVerified,
               lastActive: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
 
             if (isMe) {
-              state.stats.weeklyPoints = newPts;
               state.stats.weekSeconds = Math.round(newHrs * 3600);
+              state.stats.weeklyPoints = newPts;
               state.streak.count = newStreak;
               state.user.isPremium = newVerified;
               saveLocalState();
@@ -1326,16 +1361,17 @@
 
             const target = cachedLeaderboardUsers.find(u => u.uid === user.uid);
             if (target) {
-              target.points = newPts;
-              target.weeklyPoints = newPts;
               target.weeklyHours = newHrs;
+              target.weekSeconds = Math.round(newHrs * 3600);
+              target.totalSeconds = Math.round(newHrs * 3600);
+              target.points = newPts;
               target.streak = newStreak;
               target.isPremium = newVerified;
             }
 
             renderClassoreLeaderboard();
             closeModal();
-            showInAppToast("Admin Notice", `Successfully updated stats for ${user.displayName || "user"}!`);
+            showInAppToast("Admin Notice", `Updated stats for ${user.displayName || "user"}!`);
           } catch (err) {
             console.error("Admin update error:", err);
             alert("Error saving: check Firestore security rules to allow admin writes.");
@@ -1355,7 +1391,7 @@
   }
 
   // -------------------------------------------------------------
-  // 11. NOTIFICATIONS COMPOSER (ADMIN BROADCAST & DIRECT)
+  // 11. NOTIFICATIONS COMPOSER (BROADCAST & DIRECT)
   // -------------------------------------------------------------
   function openNotificationComposerModal(targetUser = null) {
     if (!state.user.isAdmin) return;
@@ -1425,7 +1461,6 @@
     }
   }
 
-  // Real-time listener for incoming notifications + Native OS Notifications
   function initRealtimeNotificationsListener() {
     if (!window.firebase || !firebase.apps.length) return;
     const db = firebase.firestore();
@@ -1444,11 +1479,7 @@
 
             if (isForMe && !hasSeen) {
               localStorage.setItem("morrow_seen_notif_" + notifId, "true");
-
-              // 1. In-App Frosted Banner
               showInAppToast(data.title, data.message, data.senderName);
-
-              // 2. Real Native Windows / Mac / Android OS System Notification
               triggerRealOSNotification(data.title, data.message);
             }
           }
@@ -1505,11 +1536,11 @@
           displayName: data.displayName || "Scholar",
           avatar: data.avatar || null,
           bio: data.bio || "Scholar",
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? ((data.weekSeconds || 0) / 3600) ?? 0,
+          todaySeconds: data.todaySeconds || 0,
+          totalSeconds: data.totalSeconds || ((data.totalStudyTime || 0) * 60) || 0,
+          weekSeconds: data.weekSeconds || Math.round((data.weeklyHours || 0) * 3600) || 0,
           points: data.points ?? data.weeklyPoints ?? 0,
-          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
-          dailyPoints: data.dailyPoints ?? data.points ?? 0,
-          allTimePoints: data.allTimePoints ?? data.points ?? 0,
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
           streak: data.streak || 0,
           isPremium: isSuperAdmin(userEmail) || data.isPremium === true
         });
@@ -1528,11 +1559,11 @@
           displayName: data.displayName || "Scholar",
           avatar: data.avatar || null,
           bio: data.bio || "Scholar",
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? ((data.weekSeconds || 0) / 3600) ?? 0,
+          todaySeconds: data.todaySeconds || 0,
+          totalSeconds: data.totalSeconds || ((data.totalStudyTime || 0) * 60) || 0,
+          weekSeconds: data.weekSeconds || Math.round((data.weeklyHours || 0) * 3600) || 0,
           points: data.points ?? data.weeklyPoints ?? 0,
-          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
-          dailyPoints: data.dailyPoints ?? data.points ?? 0,
-          allTimePoints: data.allTimePoints ?? data.points ?? 0,
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
           streak: data.streak || 0,
           isPremium: isSuperAdmin(userEmail) || data.isPremium === true
         });
@@ -1625,7 +1656,7 @@
           state.user.isPremium = true;
         }
 
-        console.log(`[MORROW] Hydrated user state from cloud: ${state.stats.weeklyPoints} pts, ${state.streak.count} day streak.`);
+        console.log(`[MORROW] Hydrated user from cloud: ${(state.stats.weekSeconds / 3600).toFixed(1)} hrs, ${state.streak.count} day streak.`);
       }
 
       isCloudHydrated = true;
@@ -1695,11 +1726,11 @@
           displayName: data.displayName || "Scholar",
           avatar: data.avatar || null,
           bio: data.bio || "Scholar",
+          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? ((data.weekSeconds || 0) / 3600) ?? 0,
+          todaySeconds: data.todaySeconds || 0,
+          totalSeconds: data.totalSeconds || ((data.totalStudyTime || 0) * 60) || 0,
+          weekSeconds: data.weekSeconds || Math.round((data.weeklyHours || 0) * 3600) || 0,
           points: data.points ?? data.weeklyPoints ?? 0,
-          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
-          dailyPoints: data.dailyPoints ?? data.points ?? 0,
-          allTimePoints: data.allTimePoints ?? data.points ?? 0,
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
           streak: data.streak || 0,
           isPremium: isSuperAdmin(userEmail) || data.isPremium === true
         });
@@ -1745,7 +1776,7 @@
         initFirestoreRealtimeLeaderboard();
         initRealtimeNotificationsListener();
         initClassoreLeagues();
-        initSystemNotifications(); // Requests native browser/phone system notification permissions
+        initSystemNotifications();
 
         await hydrateUserFromCloud(user.uid);
       } else {
@@ -1873,6 +1904,9 @@
 
   function renderUserProfile() {
     const isVerified = isUserPremium(state.user);
+    const userHours = extractUserHours(state.user, "weekly");
+    const tier = getTierForHours(userHours);
+
     const sideName = $("#sideUserName");
     if (sideName) {
       sideName.innerHTML = `<span>${state.user.displayName}</span> ${getVerifiedBadgeHtml(isVerified)}`;
