@@ -1,1033 +1,183 @@
 <!DOCTYPE html>
-<html lang="en" class="boot">
+<html lang="en" class="dark">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MORROW — Deep Focus</title>
-
-<!-- Favicon -->
-<link rel="icon" type="image/jpeg" href="App logo.jpg">
-
-<!-- Fonts -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-
-<!-- Lucide Icons -->
-<script src="https://unpkg.com/lucide@latest"></script>
-
-<!-- Firebase SDKs & Config -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="firebase-config.js"></script>
-
-<style>
-/* ============================================================
-   TOKENS & LIQUID GLASS FROSTED EFFECTS
-   ============================================================ */
-@property --accent      { syntax: "<color>"; inherits: true; initial-value: #ca3838; }
-@property --accent-2    { syntax: "<color>"; inherits: true; initial-value: #e26d6d; }
-@property --accent-soft { syntax: "<color>"; inherits: true; initial-value: rgba(202, 56, 56, .14); }
-@property --accent-mid  { syntax: "<color>"; inherits: true; initial-value: rgba(202, 56, 56, .35); }
-@property --on-accent   { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
-
-:root {
-  --bg: #0f1117;
-  --surface: rgba(23, 26, 35, 0.75);
-  --surface-raised: rgba(31, 35, 48, 0.85);
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.2);
-  --ink: #eef0f6;
-  --muted: #9aa2b5;
-  --accent: #ca3838;
-  --accent-2: #e26d6d;
-  --on-accent: #ffffff;
-  --flame: #ff9457;
-  --gold: #f59e0b;
-  --silver: #94a3b8;
-  --bronze: #b45309;
-  --danger: #ff6b88;
-  --status-green: #10b981;
-  --status-orange: #f59e0b;
-  --status-red: #ef4444;
-  --radius: 20px;
-  --font-mono: 'JetBrains Mono', monospace;
-  transition: --accent .5s ease, --accent-2 .5s ease;
-}
-
-:root[data-theme="light"] {
-  --bg: #f4f5f8;
-  --surface: rgba(255, 255, 255, 0.82);
-  --surface-raised: rgba(248, 249, 252, 0.9);
-  --line: rgba(20, 23, 31, 0.08);
-  --line-strong: rgba(20, 23, 31, 0.16);
-  --ink: #14171f;
-  --muted: #667085;
-}
-
-* {
-  box-sizing: border-box;
-  user-select: none !important;
-  -webkit-user-select: none !important;
-  -webkit-touch-callout: none !important;
-}
-input, textarea {
-  user-select: text !important;
-  -webkit-user-select: text !important;
-}
-
-html, body {
-  margin: 0;
-  min-height: 100vh;
-  width: 100%;
-  overflow-x: hidden;
-}
-body {
-  font-family: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--ink);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-html.boot, html.boot * { transition: none !important; }
-
-button { font: inherit; color: inherit; }
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-[hidden] { display: none !important; }
-
-.app {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  min-height: 100vh;
-  width: 100%;
-  position: relative;
-  overflow-x: hidden;
-}
-
-/* Sidebar — Liquid Glass Style */
-.sidebar {
-  position: sticky; top: 0; height: 100vh;
-  padding: 24px 16px;
-  border-right: 1px solid var(--line);
-  display: flex; flex-direction: column; justify-content: space-between;
-  background: var(--surface);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  box-shadow: 4px 0 30px rgba(0,0,0,0.15);
-  z-index: 20;
-}
-.brand { display: flex; align-items: center; gap: 12px; padding: 0 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -.02em; }
-.brand img { width: 34px; height: 34px; border-radius: 10px; object-fit: cover; box-shadow: 0 4px 14px var(--accent-mid); }
-
-.nav { position: relative; display: flex; flex-direction: column; gap: 4px; flex: 1; margin-top: 24px; }
-.indicator { position: absolute; left: 0; top: 0; width: 0; height: 0; border-radius: 12px; pointer-events: none; opacity: 0; }
-.indicator.ready { opacity: 1; transition: transform .32s cubic-bezier(.3, 1.2, .4, 1), width .32s, height .32s; }
-.nav .indicator { background: var(--accent-soft); border: 1px solid var(--accent-mid); }
-
-.tab {
-  position: relative; z-index: 1;
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 14px; border: 0; border-radius: 12px;
-  background: none; color: var(--muted); font-weight: 600; text-align: left;
-  cursor: pointer; transition: color .2s, background .2s;
-}
-.tab:hover { color: var(--ink); background: var(--accent-soft); }
-.tab[aria-selected="true"] { color: var(--ink); }
-.tab[aria-selected="true"] svg { color: var(--accent); }
-
-/* Liquid Glass Buttons */
-.btn {
-  position: relative; overflow: hidden;
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-width: 104px; padding: 12px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000));
-  color: var(--on-accent);
-  font-weight: 700; font-size: .92rem; cursor: pointer;
-  box-shadow: 0 8px 25px -6px var(--accent-mid), inset 0 1px 0 rgba(255,255,255,0.3);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-.btn:hover { filter: brightness(1.1); box-shadow: 0 12px 30px -6px var(--accent), inset 0 1px 0 rgba(255,255,255,0.4); }
-.btn:active { transform: scale(.96); }
-.btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); }
-.btn.ghost:hover { background: var(--accent-soft); border-color: var(--accent); }
-.btn.save-accent { background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 8px 25px -6px rgba(16, 185, 129, 0.4); }
-
-/* Sidebar Bottom Area */
-.sidebar-bottom { display: flex; flex-direction: column; gap: 14px; }
-.sidebar-user {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 14px; border-radius: 16px;
-  background: var(--surface); border: 1px solid var(--line);
-  backdrop-filter: blur(12px);
-}
-.avatar-wrap { position: relative; width: 40px; height: 40px; flex: none; }
-.user-avatar-elem {
-  width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
-  background: var(--surface-raised); border: 1px solid var(--line-strong);
-  display: grid; place-items: center; font-weight: 700; font-size: .85rem; color: var(--ink);
-}
-.presence-dot {
-  position: absolute; bottom: 0; right: 0; width: 11px; height: 11px;
-  border-radius: 50%; border: 2px solid var(--surface);
-}
-.presence-dot.online { background: var(--status-orange); }
-.presence-dot.studying { background: var(--status-green); box-shadow: 0 0 10px rgba(16, 185, 129, 0.9); animation: pulse-green 1.5s infinite; }
-@keyframes pulse-green { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.3); } }
-.presence-dot.offline { background: var(--status-red); }
-.user-name-line { font-weight: 700; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
-.user-streak-line { font-size: .78rem; color: var(--muted); }
-
-.permanent-credit { font-size: .78rem; color: var(--muted); text-align: center; padding: 4px 8px; line-height: 1.3; }
-.permanent-credit strong { color: var(--ink); }
-
-/* Main Content Area */
-main {
-  width: 100%;
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 28px clamp(14px, 3.5vw, 40px) 84px;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  z-index: 1;
-}
-.panel { flex: 1; animation: panel-in .25s ease both; width: 100%; }
-@keyframes panel-in { from { opacity: 0; } to { opacity: 1; } }
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 16px 40px rgba(0,0,0,0.2);
-}
-
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 24px; position: relative; z-index: 2; width: 100%; }
-.topbar h1 { margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -.025em; }
-
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
-.streak-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 14px; border-radius: 999px;
-  background: var(--surface); border: 1px solid var(--line);
-  font-weight: 600; font-size: .88rem; white-space: nowrap;
-  backdrop-filter: blur(10px);
-}
-.flame-icon { color: var(--flame); font-size: 1.15rem; }
-
-.claim-chip-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 16px; border-radius: 999px;
-  background: linear-gradient(135deg, rgba(202, 56, 56, .2), rgba(245, 158, 11, .2));
-  border: 1px solid var(--accent); color: var(--ink);
-  font-weight: 700; font-size: .88rem; cursor: pointer;
-  backdrop-filter: blur(10px);
-  transition: all .2s;
-}
-.claim-chip-btn:hover { transform: scale(1.03); box-shadow: 0 4px 16px var(--accent-soft); }
-
-.fx-ripple {
-  position: absolute; border-radius: 50%;
-  background: currentColor; opacity: .26;
-  transform: scale(0); pointer-events: none;
-  animation: fx-ripple .6s ease-out forwards;
-}
-@keyframes fx-ripple { to { transform: scale(1); opacity: 0; } }
-
-/* ============================================================
-   TIMER TAB — FULLSCREEN BLUR BACKGROUND & WHITE NOISE WIDGET
-   ============================================================ */
-#panel-timer { position: relative; padding: 8px 0; }
-
-.timer-bg-container {
-  position: fixed; inset: 0; width: 100vw; height: 100vh;
-  overflow: hidden; pointer-events: none; z-index: 0;
-}
-.timer-bg-img {
-  position: absolute; inset: -15px; background-size: cover; background-position: center; background-repeat: no-repeat;
-  filter: blur(7px); transform: translate3d(0, 0, 0) scale(1.03); will-change: transform, opacity; opacity: 0;
-  transition: opacity 0.4s ease;
-}
-[data-theme="light"] .timer-bg-light { background-image: url('bg-light.jpg'); opacity: 0.55; filter: blur(6px) brightness(1.02); }
-:root:not([data-theme="light"]) .timer-bg-dark { background-image: url('bg-dark.jpg'); opacity: 0.65; filter: blur(6px) brightness(0.85); }
-.timer-bg-overlay {
-  position: absolute; inset: 0;
-  background: radial-gradient(circle at center, rgba(15, 17, 23, 0.4) 0%, rgba(15, 17, 23, 0.72) 100%);
-}
-[data-theme="light"] .timer-bg-overlay {
-  background: radial-gradient(circle at center, rgba(244, 245, 248, 0.35) 0%, rgba(244, 245, 248, 0.68) 100%);
-}
-
-.timer-wrap { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; width: 100%; }
-
-.seg { position: relative; display: inline-flex; padding: 4px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); backdrop-filter: blur(12px); }
-.seg .indicator { background: var(--accent); border-radius: 10px; }
-.seg button {
-  position: relative; z-index: 1; border: 0; background: none; cursor: pointer;
-  padding: 8px 22px; border-radius: 10px; font-weight: 600; font-size: .92rem; color: var(--muted);
-  transition: color .2s;
-}
-.seg button:hover { color: var(--ink); }
-.seg button[aria-pressed="true"] { color: var(--on-accent); }
-
-.subjects-container { position: relative; margin-top: 18px; width: 100%; }
-.subjects { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 560px; margin: 0 auto; transition: opacity .3s; }
-.subjects.timer-locked { opacity: 0.55; }
-.subjects.timer-locked .chip-main { cursor: not-allowed !important; }
-
-.subject-lock-hint {
-  display: none; align-items: center; justify-content: center; gap: 6px;
-  font-size: .78rem; color: var(--flame); margin-top: 6px; font-weight: 600;
-}
-.subject-lock-hint.visible { display: flex; }
-
-.chip {
-  position: relative; display: inline-flex; align-items: center;
-  border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface);
-  backdrop-filter: blur(10px); transition: all .25s ease;
-}
-.chip-main {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 16px; border: 0; border-radius: 999px; background: none;
-  font-weight: 600; font-size: .9rem; cursor: pointer;
-}
-.chip-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
-.chip.on { background: var(--c); border-color: var(--c); color: var(--oc); box-shadow: 0 4px 16px var(--accent-mid); }
-.chip.on .chip-dot { background: var(--oc); }
-
-.topic-input-container {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; max-width: 440px; margin-top: 14px;
-  padding: 10px 16px; border-radius: 14px;
-  background: var(--surface); border: 1px solid var(--line);
-  backdrop-filter: blur(12px);
-}
-.topic-input-container input {
-  flex: 1; border: 0; background: none; color: var(--ink); font: inherit; outline: none; font-size: .9rem;
-}
-
-.ring { position: relative; width: min(330px, 76vw); aspect-ratio: 1; margin: 20px 0 4px; }
-.ring::before {
-  content: ""; position: absolute; inset: 17%; border-radius: 50%;
-  background: radial-gradient(circle, var(--accent-soft), transparent 68%);
-  animation: breathe 4.2s ease-in-out infinite; animation-play-state: paused;
-}
-.ring.running::before { animation-play-state: running; }
-@keyframes breathe { 0%, 100% { transform: scale(.9); opacity: .55; } 50% { transform: scale(1.08); opacity: 1; } }
-
-.wave-canvas {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  border-radius: 50%; pointer-events: none; z-index: 1;
-}
-
-.ring svg { position: relative; z-index: 2; width: 100%; height: 100%; overflow: visible; }
-.track { fill: none; stroke: var(--line-strong); stroke-width: 7; }
-.progress {
-  fill: none; stroke-width: 7; stroke-linecap: round;
-  filter: drop-shadow(0 0 6px var(--accent-mid));
-  transition: stroke-dashoffset .5s ease, filter .4s;
-}
-
-.readout { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
-.time { display: flex; justify-content: center; font-family: var(--font-mono); font-size: clamp(2.8rem, 11vw, 4.4rem); font-weight: 700; letter-spacing: -.02em; line-height: 1; }
-.status { font-size: .95rem; color: var(--muted); }
-.active-topic-tag { font-size: .8rem; color: var(--muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.controls {
-  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
-  margin-top: 22px; width: 100%; max-width: 440px;
-}
-
-.pending-session-card {
-  display: none; align-items: center; justify-content: space-between; gap: 14px;
-  width: 100%; max-width: 480px; margin-top: 18px; padding: 14px 18px; border-radius: 16px;
-  background: var(--surface); border: 1px solid var(--accent); backdrop-filter: blur(12px);
-}
-.pending-session-card.visible { display: flex; }
-
-.week { width: 100%; max-width: 480px; margin-top: 28px; padding: 20px 22px 18px; }
-.week-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
-.week-head strong { font-size: 1.05rem; }
-.week-head span { font-size: .85rem; color: var(--muted); }
-.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.day { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .75rem; color: var(--muted); }
-.dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--line-strong); }
-.dot svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
-.day:not(.done) .dot svg { display: none; }
-.day.done .dot { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.day.today .dot { border-color: var(--accent); }
-.day.today { color: var(--ink); font-weight: 600; }
-
-/* ============================================================
-   WHITE NOISE SOUND WIDGET (Like requested screenshot)
-   ============================================================ */
-.noise-widget-btn {
-  position: absolute; bottom: 20px; left: 20px;
-  width: 46px; height: 46px; border-radius: 50%;
-  background: var(--surface); border: 1px solid var(--line-strong);
-  display: grid; place-items: center; cursor: pointer; color: var(--ink);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3); backdrop-filter: blur(14px);
-  z-index: 15; transition: transform 0.2s, background 0.2s;
-}
-.noise-widget-btn:hover { transform: scale(1.08); background: var(--accent-soft); border-color: var(--accent); }
-
-.noise-modal {
-  position: fixed; inset: 0; z-index: 99999;
-  background: rgba(10, 12, 18, 0.7); backdrop-filter: blur(16px);
-  display: grid; place-items: center; padding: 20px;
-  opacity: 0; pointer-events: none; transition: opacity .25s ease;
-}
-.noise-modal.active { opacity: 1; pointer-events: auto; }
-.noise-panel {
-  background: #161922; border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 24px; padding: 28px; width: 100%; max-width: 520px;
-  box-shadow: 0 30px 60px rgba(0,0,0,0.8);
-  transform: scale(0.95); transition: transform .25s ease;
-}
-.noise-modal.active .noise-panel { transform: scale(1); }
-.noise-grid {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 24px;
-}
-.noise-item {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 12px 8px; border-radius: 16px; background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06); cursor: pointer; color: var(--muted);
-  transition: all 0.2s; position: relative;
-}
-.noise-item:hover { background: rgba(255,255,255,0.07); color: var(--ink); }
-.noise-item.active { background: rgba(202,56,56,0.18); border-color: var(--accent); color: var(--ink); }
-.noise-item svg { width: 22px; height: 22px; }
-
-/* ============================================================
-   TASKS TAB
-   ============================================================ */
-.add { display: flex; gap: 10px; margin-bottom: 20px; width: 100%; }
-.field {
-  flex: 1; min-width: 0; padding: 13px 16px;
-  border: 1px solid var(--line-strong); border-radius: 14px;
-  background: var(--surface); color: var(--ink); font: inherit;
-  backdrop-filter: blur(10px);
-}
-.field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-select.field { flex: 0 0 auto; width: auto; cursor: pointer; }
-
-.task-list { list-style: none; margin: 0; padding: 0; width: 100%; }
-.task { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-.task:last-child { border-bottom: 0; }
-.task-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.task.done .task-text { color: var(--muted); text-decoration: line-through; }
-.task-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
-
-.check {
-  width: 26px; height: 26px; flex: none; padding: 0; border-radius: 50%;
-  display: grid; place-items: center; cursor: pointer;
-  border: 2px solid var(--line-strong); background: transparent; color: var(--on-accent);
-}
-.check svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: none; }
-.check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
-.check[aria-checked="true"] svg { display: block; }
-.del-task-btn { border: 0; background: none; padding: 6px; color: var(--muted); cursor: pointer; border-radius: 6px; flex-shrink: 0; }
-.del-task-btn:hover { color: var(--danger); background: var(--accent-soft); }
-.empty { padding: 36px 16px; text-align: center; color: var(--muted); }
-
-/* ============================================================
-   PROGRESS TAB (Restored Column Bar Graph + Animations)
-   ============================================================ */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; width: 100%; }
-.stat { padding: 18px 20px; }
-.stat span { display: block; font-size: .88rem; color: var(--muted); }
-.stat strong { display: block; margin-top: 4px; font-size: 1.8rem; font-weight: 800; letter-spacing: -.02em; }
-
-.chart { padding: 22px; position: relative; width: 100%; }
-.chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
-.chart h2, .goal h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
-
-.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; width: 100%; }
-.col { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
-.col .well {
-  width: 100%; height: 150px; display: flex; align-items: flex-end;
-  background: rgba(255, 255, 255, 0.03); border-radius: 8px; border: 1px solid var(--line); padding: 2px;
-}
-.col i {
-  display: block; width: 100%; height: var(--h, 0%); border-radius: 6px 6px 3px 3px;
-  background: var(--accent-mid); transform-origin: bottom;
-  animation: grow .55s cubic-bezier(.2, .9, .3, 1) both; animation-delay: calc(var(--n, 0) * 45ms);
-}
-.col.today i { background: var(--accent); }
-.col.today { color: var(--ink); font-weight: 600; }
-@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-
-.goal { padding: 22px; margin-top: 14px; width: 100%; }
-.goal-row { display: flex; justify-content: space-between; font-size: .9rem; margin-bottom: 10px; }
-.meter { height: 10px; border-radius: 999px; background: var(--line-strong); overflow: hidden; }
-.meter i { display: block; height: 100%; width: 0%; border-radius: inherit; background: var(--accent); transition: width .5s ease; }
-
-.sync-bar { display: flex; justify-content: flex-end; margin-top: 16px; width: 100%; }
-
-/* ============================================================
-   RANKING TAB (Leaderboard 1904x560 Banner + Classore UI)
-   ============================================================ */
-.classore-banner-container {
-  width: 100%; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line);
-  margin-bottom: 22px; background: var(--surface); aspect-ratio: 1904 / 560; max-height: 220px; display: flex;
-  backdrop-filter: blur(20px);
-}
-.classore-banner-img { width: 100%; height: 100%; object-fit: cover; display: none; }
-[data-theme="light"] .banner-light { display: block; }
-:root:not([data-theme="light"]) .banner-dark { display: block; }
-
-.classore-filter-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; width: 100%; }
-.league-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.league-tab-btn {
-  padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line);
-  background: var(--surface); font-size: .88rem; font-weight: 600; color: var(--muted); cursor: pointer;
-  backdrop-filter: blur(10px); transition: all .2s;
-}
-.league-tab-btn.active { background: var(--accent-soft); color: var(--ink); border-color: var(--accent); }
-
-.classore-sub-filters {
-  display: flex; gap: 10px; font-size: .88rem; color: var(--muted); border-bottom: 1px solid var(--line);
-  padding-bottom: 12px; margin-bottom: 20px; overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;
-}
-.sub-filter-item { cursor: pointer; white-space: nowrap; font-weight: 600; padding: 4px 10px; border-radius: 8px; transition: all .2s; flex-shrink: 0; }
-.sub-filter-item:hover, .sub-filter-item.active { color: var(--accent); background: var(--accent-soft); }
-
-.classore-grid { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; width: 100%; }
-
-.leaderboard-list { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-.leaderboard-row {
-  display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;
-  border-radius: 16px; background: var(--surface); border: 1px solid var(--line);
-  backdrop-filter: blur(16px); transition: all .2s; gap: 10px; width: 100%; cursor: pointer;
-}
-.leaderboard-row:hover { background: var(--surface-raised); transform: translateY(-1px); }
-.leaderboard-row.is-me { border-color: var(--accent); background: var(--accent-soft); }
-
-.row-user-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
-.rank-badge-wrap { width: 28px; display: grid; place-items: center; font-weight: 800; font-size: .95rem; flex: none; }
-.badge-gold { color: var(--gold); }
-.badge-silver { color: var(--silver); }
-.badge-bronze { color: var(--bronze); }
-
-.user-row-avatar {
-  width: 38px; height: 38px; border-radius: 50%; object-fit: cover; background: var(--surface-raised);
-  border: 1px solid var(--line-strong); display: grid; place-items: center; font-weight: 700; font-size: .85rem; flex: none;
-}
-.user-name-title { font-weight: 700; font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-sub-location { font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.points-pill {
-  padding: 5px 12px; border-radius: 999px; background: var(--surface-raised); border: 1px solid var(--line);
-  font-family: var(--font-mono); font-weight: 700; font-size: .82rem; color: var(--ink); white-space: nowrap; flex: none;
-}
-
-.user-summary-card { padding: 22px; display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%; }
-.profile-card-avatar {
-  width: 70px; height: 70px; border-radius: 50%; object-fit: cover; background: var(--surface-raised);
-  border: 2px solid var(--accent); display: grid; place-items: center; font-size: 1.35rem; font-weight: 800; margin-bottom: 10px;
-}
-.profile-card-name { font-size: 1.1rem; font-weight: 800; margin-bottom: 2px; }
-.profile-card-bio { font-size: .82rem; color: var(--muted); margin-bottom: 18px; }
-
-.stats-2x2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
-.stat-mini-tile { background: var(--surface-raised); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; text-align: left; }
-.tile-head { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--muted); }
-.tile-num { font-size: 1.2rem; font-weight: 800; margin-top: 4px; }
-
-.relative-context-banner {
-  margin-top: 16px; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft);
-  border: 1px solid var(--accent); font-size: .8rem; font-weight: 600; width: 100%; text-align: center;
-}
-
-/* ============================================================
-   PREFERENCES TAB
-   ============================================================ */
-.prefs { padding: 12px 24px; width: 100%; }
-.pref { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line); width: 100%; }
-.pref:last-child { border-bottom: 0; }
-.pref h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
-.pref p { margin: 3px 0 0; font-size: .88rem; color: var(--muted); }
-
-.avatar-drop-zone {
-  display: flex; align-items: center; gap: 16px; padding: 12px; border-radius: 16px;
-  border: 2px dashed var(--line-strong); background: var(--surface-raised); transition: all .2s ease; cursor: pointer;
-}
-.avatar-drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); }
-.preview-large-avatar {
-  width: 60px; height: 60px; border-radius: 50%; object-fit: cover;
-  background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center;
-  font-size: 1.2rem; font-weight: 700; flex-shrink: 0;
-}
-
-.subject-edit-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; width: 100%; max-width: 420px; }
-.subject-edit-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background: var(--surface-raised); border: 1px solid var(--line); }
-.new-subject-form { display: flex; gap: 8px; margin-top: 10px; width: 100%; max-width: 420px; }
-
-.switch {
-  position: relative; flex: none; width: 54px; height: 30px; padding: 0; border: 0; border-radius: 999px;
-  background: var(--line-strong); cursor: pointer; transition: background-color .25s;
-}
-.switch::after {
-  content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
-  background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .25); transition: transform .3s cubic-bezier(.3, 1.6, .5, 1);
-}
-.switch[aria-checked="true"] { background: var(--accent); }
-.switch[aria-checked="true"]::after { transform: translateX(24px); }
-
-/* In-App Custom Modal */
-.modal-overlay {
-  position: fixed; inset: 0; z-index: 99999; background: rgba(10, 12, 18, 0.78);
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  display: flex; align-items: center; justify-content: center; padding: 20px;
-  opacity: 0; pointer-events: none; transition: opacity .25s ease;
-}
-.modal-overlay.active { opacity: 1; pointer-events: auto; }
-.modal-card {
-  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 24px;
-  padding: 28px; max-width: 440px; width: 100%; text-align: center;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 25px var(--accent-mid);
-  backdrop-filter: blur(24px); transform: scale(.95); transition: transform .25s ease;
-}
-.modal-overlay.active .modal-card { transform: scale(1); }
-.modal-icon { width: 50px; height: 50px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin: 0 auto 16px; }
-
-/* ============================================================
-   RESPONSIVE MOBILE ENGINE
-   ============================================================ */
-@media (max-width: 860px) {
-  .classore-grid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; width: 100vw; overflow-x: hidden; }
-  .sidebar {
-    position: fixed; inset: auto 0 0 0; height: auto; width: 100vw;
-    flex-direction: row; gap: 0; padding: 6px 4px calc(8px + env(safe-area-inset-bottom, 0px));
-    border-right: 0; border-top: 1px solid var(--line); background: var(--surface);
-    backdrop-filter: blur(20px); box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.4); z-index: 100;
-  }
-  .brand, .sidebar-bottom { display: none !important; }
-  .nav { flex-direction: row; width: 100%; margin: 0; gap: 2px; }
-  .tab {
-    flex: 1; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px;
-    font-size: .68rem; text-align: center; border-radius: 10px; min-width: 0;
-  }
-  .tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
-  main { padding: 16px 14px calc(130px + env(safe-area-inset-bottom, 0px)); width: 100%; max-width: 100vw; overflow-x: hidden; }
-  .topbar { margin-bottom: 18px; gap: 8px; }
-  .topbar h1 { font-size: 1.45rem; }
-  .streak-chip { padding: 5px 10px; font-size: .8rem; }
-  .ring { width: min(290px, 74vw); margin: 16px 0 4px; }
-  .time { font-size: clamp(2.4rem, 10vw, 3.4rem); }
-  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 360px; }
-  .controls .btn { min-width: 0; padding: 12px 14px; font-size: .88rem; }
-  #resetBtn { grid-column: 1 / -1; }
-  .week { padding: 16px 14px; margin-top: 20px; }
-  .dot { width: 30px; height: 30px; }
-  .add { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-  #taskInput { width: 100%; }
-  .add-sub-row { display: flex; gap: 8px; width: 100%; }
-  #taskSubSelect { flex: 1; min-width: 0; }
-  .add .btn { flex: 1; min-width: 0; padding: 12px 14px; }
-  .stats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .stat { padding: 12px 8px; text-align: center; }
-  .stat span { font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .stat strong { font-size: 1.25rem; margin-top: 2px; }
-  .bars { gap: 6px; }
-  .col .well { height: 120px; }
-  .classore-banner-container { max-height: 120px; margin-bottom: 16px; }
-  .classore-filter-bar { flex-direction: column; align-items: stretch; gap: 10px; }
-  .league-tabs { display: flex; width: 100%; }
-  .league-tab-btn { flex: 1; text-align: center; padding: 6px 8px; font-size: .78rem; }
-  .leaderboard-row { padding: 10px 12px; }
-  .points-pill { padding: 4px 8px; font-size: .75rem; }
-  .stats-2x2-grid { gap: 8px; }
-  .stat-mini-tile { padding: 8px 10px; }
-  .tile-num { font-size: 1.1rem; }
-  .prefs { padding: 12px 14px; }
-  .pref { flex-direction: column; align-items: stretch; gap: 12px; padding: 16px 0; }
-  .new-subject-form { flex-direction: column; gap: 8px; width: 100%; }
-  .new-subject-form-controls { display: flex; gap: 8px; width: 100%; }
-  #newSubColor { width: 48px; flex-shrink: 0; }
-  .new-subject-form .btn { flex: 1; }
-  #btnSavePreferences { width: 100%; padding: 14px; }
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 | System Maintenance in Progress</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for crisp vector icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
+<body class="bg-[#0d1117] text-slate-200 font-sans min-h-screen flex flex-col justify-between relative overflow-x-hidden selection:bg-indigo-500 selection:text-white">
 
-<body oncontextmenu="return false;">
-
-<div class="app">
-
-  <!-- ===================== SIDEBAR ===================== -->
-  <aside class="sidebar">
-    <div>
-      <div class="brand">
-        <img src="App logo.jpg" alt="MORROW Logo" onerror="this.src='https://api.dicebear.com/7.x/identicon/svg?seed=MORROW'">
-        <span>MORROW</span>
-      </div>
-
-      <nav class="nav" role="tablist" aria-orientation="vertical">
-        <span class="indicator" id="navIndicator" aria-hidden="true"></span>
-        <button class="tab" role="tab" id="tab-timer" aria-selected="true" data-tab="timer">
-          <i data-lucide="timer"></i><span>Timer</span>
-        </button>
-        <button class="tab" role="tab" id="tab-tasks" aria-selected="false" data-tab="tasks" tabindex="-1">
-          <i data-lucide="check-square"></i><span>Tasks</span>
-        </button>
-        <button class="tab" role="tab" id="tab-progress" aria-selected="false" data-tab="progress" tabindex="-1">
-          <i data-lucide="activity"></i><span>Progress</span>
-        </button>
-        <button class="tab" role="tab" id="tab-ranking" aria-selected="false" data-tab="ranking" tabindex="-1">
-          <i data-lucide="trophy"></i><span>Ranking</span>
-        </button>
-        <button class="tab" role="tab" id="tab-preferences" aria-selected="false" data-tab="preferences" tabindex="-1">
-          <i data-lucide="sliders"></i><span>Preferences</span>
-        </button>
-      </nav>
+    <!-- Subtle Ambient Space / Grid Background -->
+    <div class="fixed inset-0 z-0 pointer-events-none">
+        <img 
+            src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2072&q=80" 
+            alt="Subtle Space Horizon" 
+            onerror="this.style.display='none'"
+            class="w-full h-full object-cover opacity-20 mix-blend-screen"
+        >
+        <div class="absolute inset-0 bg-gradient-to-b from-[#0d1117]/70 via-[#0d1117]/85 to-[#0d1117]"></div>
+        <div class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[32rem] h-[32rem] bg-indigo-500/10 rounded-full blur-3xl animate-pulse-slow"></div>
     </div>
 
-    <!-- Sidebar Bottom: User + Permanent Credit -->
-    <div class="sidebar-bottom">
-      <div class="sidebar-user">
-        <div class="avatar-wrap">
-          <div id="sideAvatarContainer" class="user-avatar-elem"></div>
-          <span class="presence-dot offline" id="sidePresence"></span>
-        </div>
-        <div style="min-width: 0;">
-          <div class="user-name-line" id="sideUserName">Scholar</div>
-          <div class="user-streak-line">🔥 <span id="sideStreakNum">0</span> day streak</div>
-        </div>
-      </div>
-
-      <div class="permanent-credit">
-        Made by <strong>Gethmina Halangoda</strong>
-      </div>
-    </div>
-  </aside>
-
-  <!-- ===================== MAIN CONTENT ===================== -->
-  <main>
-    <header class="topbar">
-      <h1 id="pageTitle">Timer</h1>
-      <div class="topbar-actions">
-        <button class="claim-chip-btn" id="topClaimPointsBtn" style="display: none;">
-          <i data-lucide="gift" style="width: 15px; height: 15px;"></i>
-          <span>Claim Points</span>
-        </button>
-        <div class="streak-chip" title="Daily study streak">
-          <span class="flame-icon">🔥</span>
-          <span id="topStreakText">0 day streak</span>
-        </div>
-      </div>
+    <!-- Minimal Top Header -->
+    <header class="relative z-10 w-full max-w-5xl mx-auto px-6 py-6 flex items-center justify-between">
+        <a href="/" class="flex items-center gap-2.5 text-slate-300 hover:text-white transition-colors">
+            <i class="fa-brands fa-github text-2xl"></i>
+            <span class="font-semibold text-sm tracking-wide">Status</span>
+        </a>
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/70 text-xs font-mono text-slate-400">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            404 / Offline
+        </span>
     </header>
 
-    <!-- ---------- TAB 1: TIMER (Fullscreen Background Layer + White Noise Widget) ---------- -->
-    <section class="panel" id="panel-timer" role="tabpanel">
-      <!-- Fullscreen Hardware-Accelerated Background -->
-      <div class="timer-bg-container" aria-hidden="true">
-        <div class="timer-bg-img timer-bg-light"></div>
-        <div class="timer-bg-img timer-bg-dark"></div>
-        <div class="timer-bg-overlay"></div>
-      </div>
+    <!-- Main Centered GitHub-Style Graphic & Minimal Message -->
+    <main class="relative z-10 flex-grow flex items-center justify-center px-6 py-8">
+        <div class="w-full max-w-xl text-center">
+            
+            <!-- GitHub-Style Custom Parallax/Floating Space Graphic -->
+            <div class="relative mx-auto w-72 h-64 sm:w-80 sm:h-72 mb-6 flex items-center justify-center select-none">
+                <!-- Background Planet / Moon Ring -->
+                <svg viewBox="0 0 320 260" class="w-full h-full drop-shadow-2xl overflow-visible" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Distant Stars -->
+                    <circle cx="45" cy="45" r="2" fill="#94a3b8" opacity="0.6"/>
+                    <circle cx="275" cy="35" r="2.5" fill="#818cf8" opacity="0.8"/>
+                    <circle cx="290" cy="180" r="1.5" fill="#94a3b8" opacity="0.5"/>
+                    <circle cx="30" cy="195" r="2" fill="#38bdf8" opacity="0.6"/>
+                    <path d="M70 25L72 30L77 32L72 34L70 39L68 34L63 32L68 30L70 25Z" fill="#cbd5e1" opacity="0.7"/>
+                    <path d="M250 95L251.5 98.5L255 100L251.5 101.5L250 105L248.5 101.5L245 100L248.5 98.5L250 95Z" fill="#818cf8" opacity="0.8"/>
 
-      <!-- White Noise Floating Widget Button -->
-      <button type="button" class="noise-widget-btn" id="openNoiseModalBtn" title="Ambient Sounds">
-        <i data-lucide="music" style="width: 20px; height: 20px;"></i>
-      </button>
+                    <!-- Glowing Horizon Planet -->
+                    <circle cx="160" cy="145" r="78" fill="url(#planetGrad)" stroke="#334155" stroke-width="1.5"/>
+                    <!-- Planet Craters -->
+                    <ellipse cx="130" cy="125" rx="14" ry="8" transform="rotate(-15 130 125)" fill="#0f172a" opacity="0.45"/>
+                    <ellipse cx="195" cy="155" rx="18" ry="10" transform="rotate(12 195 155)" fill="#0f172a" opacity="0.4"/>
+                    <circle cx="155" cy="175" r="7" fill="#0f172a" opacity="0.35"/>
 
-      <div class="timer-wrap">
+                    <!-- Orbital Ring Back -->
+                    <path d="M52 145C52 118 100 98 160 98C220 98 268 118 268 145" stroke="#475569" stroke-width="2" stroke-dasharray="6 6" opacity="0.6"/>
 
-        <!-- Mode Toggle -->
-        <div class="seg" id="seg">
-          <span class="indicator" id="segIndicator"></span>
-          <button type="button" data-mode="stopwatch" aria-pressed="true">Stopwatch</button>
-          <button type="button" data-mode="pomodoro" aria-pressed="false">Pomodoro</button>
-        </div>
+                    <!-- Floating Astronaut / Bot Mascot (GitHub Octocat-inspired space explorer) -->
+                    <g class="animate-float">
+                        <!-- Tether Cable -->
+                        <path d="M112 138C85 150 75 185 95 215" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 4"/>
+                        
+                        <!-- Jetpack -->
+                        <rect x="128" y="96" width="64" height="44" rx="12" fill="#1e293b" stroke="#475569" stroke-width="2"/>
+                        <!-- Jetpack Thruster Glow -->
+                        <path d="M142 140L138 156L148 146L142 140Z" fill="#38bdf8" opacity="0.8"/>
+                        <path d="M178 140L182 156L172 146L178 140Z" fill="#38bdf8" opacity="0.8"/>
 
-        <!-- Subjects Container (Locked while timer is actively running) -->
-        <div class="subjects-container">
-          <div class="subjects" id="subjectsBar"></div>
-          <div class="subject-lock-hint" id="subjectLockHint">
-            <i data-lucide="lock" style="width: 12px; height: 12px;"></i>
-            <span>Stop timer to change subjects</span>
-          </div>
-        </div>
+                        <!-- Helmet -->
+                        <circle cx="160" cy="95" r="36" fill="#f8fafc" stroke="#94a3b8" stroke-width="2.5"/>
+                        <!-- Cat/Bot Ears on Helmet -->
+                        <path d="M132 70L128 52L146 62Z" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round"/>
+                        <path d="M188 70L192 52L174 62Z" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round"/>
+                        
+                        <!-- Dark Visor -->
+                        <rect x="136" y="77" width="48" height="32" rx="16" fill="#0f172a"/>
+                        <!-- Visor Reflection -->
+                        <path d="M144 84C150 81 162 81 168 84" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+                        <!-- Cute Digital Eyes -->
+                        <circle cx="150" cy="94" r="3.5" fill="#38bdf8"/>
+                        <circle cx="170" cy="94" r="3.5" fill="#38bdf8"/>
 
-        <!-- Current Topic Input -->
-        <div class="topic-input-container">
-          <i data-lucide="edit-3" style="width: 16px; height: 16px; color: var(--muted);"></i>
-          <input type="text" id="topicInput" placeholder="Study topic (e.g. Calculus Problems)" maxlength="60">
-        </div>
+                        <!-- Floating Wrench / Signpost Prop -->
+                        <g transform="translate(202, 72) rotate(18)">
+                            <rect x="0" y="0" width="46" height="26" rx="6" fill="#1e293b" stroke="#818cf8" stroke-width="2"/>
+                            <text x="23" y="17" text-anchor="middle" fill="#e2e8f0" font-family="JetBrains Mono, monospace" font-size="12" font-weight="bold">404</text>
+                        </g>
+                    </g>
 
-        <!-- Ring & Wave Visualizer -->
-        <div class="ring" id="ringWrap">
-          <canvas class="wave-canvas" id="waveCanvas" width="340" height="340"></canvas>
-          <svg viewBox="0 0 240 240">
-            <circle class="track" cx="120" cy="120" r="100"/>
-            <circle class="progress" id="ringProgress" cx="120" cy="120" r="100" transform="rotate(-90 120 120)" stroke="var(--accent)"/>
-          </svg>
-          <div class="readout">
-            <div class="time" id="timeDigits">00:00</div>
-            <div class="status" id="timerStatus">Ready</div>
-            <div class="active-topic-tag" id="activeTopicTag">No topic selected</div>
-          </div>
-        </div>
+                    <!-- Orbital Ring Front -->
+                    <path d="M42 145C42 174 95 196 160 196C225 196 278 174 278 145" stroke="url(#ringGrad)" stroke-width="3" stroke-linecap="round"/>
 
-        <!-- Controls with Dedicated Save Button -->
-        <div class="controls">
-          <button type="button" class="btn" id="startBtn" data-fx="ripple"><span id="startBtnLabel">Start</span></button>
-          <button type="button" class="btn save-accent" id="saveSessionBtn" data-fx="ripple">Save Session</button>
-          <button type="button" class="btn ghost" id="resetBtn" data-fx="ripple">Reset</button>
-          <button type="button" class="btn ghost" id="skipBtn" data-fx="ripple" hidden>Skip</button>
-        </div>
-
-        <!-- Post-Session Points Card -->
-        <div class="pending-session-card" id="pendingSessionCard">
-          <div>
-            <strong style="color: #10b981; font-size: .95rem;">Unclaimed Session Time</strong>
-            <div style="font-size: .8rem; color: var(--muted);" id="pendingSessionDetails">5m focused • Tap to claim your points</div>
-          </div>
-          <button type="button" class="btn" id="claimPointsActionBtn" style="padding: 8px 16px; min-width: 0;">Claim Points</button>
-        </div>
-
-        <!-- Week Streak Guide -->
-        <div class="week card">
-          <div class="week-head">
-            <strong id="streakHeadTitle">0 day streak</strong>
-            <span id="streakBestTitle">Keep it going!</span>
-          </div>
-          <div class="days" id="weekDaysContainer"></div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ---------- TAB 2: TASKS ---------- -->
-    <section class="panel" id="panel-tasks" role="tabpanel" hidden>
-      <form class="add" id="taskForm" autocomplete="off">
-        <input class="field" id="taskInput" type="text" maxlength="120" placeholder="What are you working on?" required>
-        <div class="add-sub-row">
-          <select class="field" id="taskSubSelect"></select>
-          <button type="submit" class="btn" data-fx="ripple">Add task</button>
-        </div>
-      </form>
-      <div class="card">
-        <ul class="task-list" id="taskList"></ul>
-        <div class="empty" id="taskEmpty">No tasks yet. Add your first goal above.</div>
-      </div>
-      <p style="font-size: .84rem; color: var(--muted); margin-top: 14px;">Finished tasks are automatically cleared once your tab closes.</p>
-    </section>
-
-    <!-- ---------- TAB 3: PROGRESS ---------- -->
-    <section class="panel" id="panel-progress" role="tabpanel" hidden>
-      <div class="stats">
-        <div class="stat card"><span>Focused today</span><strong id="statToday">0h 0m</strong></div>
-        <div class="stat card"><span>This week</span><strong id="statWeek">0h 0m</strong></div>
-        <div class="stat card"><span>Total Points</span><strong id="statTotalPts">0 Pts</strong></div>
-      </div>
-
-      <div class="chart card">
-        <div class="chart-head">
-          <h2>Focus time this week</h2>
-          <span style="font-size: .85rem; color: var(--muted);" id="chartTotalBadge">0.0h total</span>
-        </div>
-        <div class="bars" id="weeklyBarsContainer"></div>
-      </div>
-
-      <div class="goal card">
-        <div class="goal-row">
-          <span id="goalTextRatio">0.0h of 4.0h</span>
-          <span class="muted" id="goalPercent">0%</span>
-        </div>
-        <div class="meter"><i id="goalMeterBar"></i></div>
-      </div>
-
-      <div class="sync-bar">
-        <button class="btn" id="btnSyncCloud" data-fx="ripple">
-          <i data-lucide="cloud-check" style="width: 16px; height: 16px;"></i>
-          <span>Save & Sync Data</span>
-        </button>
-      </div>
-    </section>
-
-    <!-- ---------- TAB 4: RANKING (Points Ranked Leaderboard + Studying Indicator) ---------- -->
-    <section class="panel" id="panel-ranking" role="tabpanel" hidden>
-      
-      <div class="classore-banner-container">
-        <img src="leaderboard-light.png" class="classore-banner-img banner-light" alt="Leaderboard" onerror="this.src='leaderboard-light.jpg'">
-        <img src="leaderboard-dark.png" class="classore-banner-img banner-dark" alt="Leaderboard" onerror="this.src='leaderboard-dark.jpg'">
-      </div>
-
-      <div class="classore-filter-bar">
-        <div class="league-tabs">
-          <button class="league-tab-btn active" data-league="weekly">Weekly League</button>
-          <button class="league-tab-btn" data-league="daily">Daily Sprint</button>
-          <button class="league-tab-btn" data-league="alltime">All-Time</button>
-        </div>
-
-        <div id="authContainer">
-          <button type="button" class="btn ghost" id="btnGoogleLogin" style="padding: 7px 16px; font-size: .85rem;">
-            <span>Sign In</span>
-          </button>
-          <button type="button" class="btn ghost" id="btnSignOut" style="display: none; padding: 7px 16px; font-size: .85rem;">Sign Out</button>
-        </div>
-      </div>
-
-      <div class="classore-sub-filters" id="subjectFilterPills">
-        <span class="sub-filter-item active" data-sub="all">All Subjects</span>
-      </div>
-
-      <div class="classore-grid">
-        <div class="leaderboard-list" id="classoreLeaderboardRows">
-          <div style="text-align: center; color: var(--muted); padding: 48px;">
-            Loading verified scholars...
-          </div>
-        </div>
-
-        <div class="card user-summary-card">
-          <div class="profile-card-avatar" id="classoreUserAvatar"></div>
-          <div class="profile-card-name" id="classoreUserName">Scholar (You)</div>
-          <div class="profile-card-bio" id="classoreUserBio">Local Scholar</div>
-
-          <div class="stats-2x2-grid">
-            <div class="stat-mini-tile">
-              <div class="tile-head">
-                <i data-lucide="trophy" style="width: 14px; height: 14px; color: var(--gold);"></i>
-                <span>Ranking</span>
-              </div>
-              <div class="tile-num" id="classoreTileRank">--</div>
+                    <defs>
+                        <linearGradient id="planetGrad" x1="100" y1="75" x2="220" y2="215" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#312e81"/>
+                            <stop offset="0.5" stop-color="#1e1b4b"/>
+                            <stop offset="1" stop-color="#0f172a"/>
+                        </linearGradient>
+                        <linearGradient id="ringGrad" x1="42" y1="145" x2="278" y2="145" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#6366f1" stop-opacity="0.1"/>
+                            <stop offset="0.5" stop-color="#818cf8" stop-opacity="0.9"/>
+                            <stop offset="1" stop-color="#38bdf8" stop-opacity="0.1"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
             </div>
 
-            <div class="stat-mini-tile">
-              <div class="tile-head">
-                <i data-lucide="zap" style="width: 14px; height: 14px; color: var(--flame);"></i>
-                <span>Streak</span>
-              </div>
-              <div class="tile-num" id="classoreTileStreak">0</div>
+            <!-- Clean, Minimalist Headline -->
+            <h1 class="text-2xl sm:text-4xl font-bold text-white tracking-tight mb-3">
+                This isn't the page you're looking for.
+            </h1>
+
+            <!-- Short, Uncluttered Subtitle -->
+            <p class="text-slate-400 text-sm sm:text-base max-w-md mx-auto mb-8 leading-relaxed">
+                We're currently down for brief maintenance. Please check back again soon.
+            </p>
+
+            <!-- Simple Single Action -->
+            <div class="flex items-center justify-center">
+                <button onclick="reloadPage()" class="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700/90 active:bg-slate-800 border border-slate-700 text-slate-200 hover:text-white font-medium text-sm transition-all duration-200 inline-flex items-center gap-2 shadow-lg cursor-pointer">
+                    <i id="refresh-icon" class="fa-solid fa-rotate-right text-xs text-indigo-400"></i>
+                    <span>Try Again</span>
+                </button>
             </div>
 
-            <div class="stat-mini-tile">
-              <div class="tile-head">
-                <i data-lucide="award" style="width: 14px; height: 14px; color: #10b981;"></i>
-                <span>Points</span>
-              </div>
-              <div class="tile-num" id="classoreTilePoints">0</div>
-            </div>
-
-            <div class="stat-mini-tile">
-              <div class="tile-head">
-                <i data-lucide="clock" style="width: 14px; height: 14px; color: var(--accent);"></i>
-                <span>Focus</span>
-              </div>
-              <div class="tile-num" id="classoreTileTime">0.0h</div>
-            </div>
-          </div>
-
-          <div class="relative-context-banner" id="classoreRelativeBanner">
-            Study today to establish your standing!
-          </div>
         </div>
-      </div>
+    </main>
 
-    </section>
+    <!-- Minimal Footer -->
+    <footer class="relative z-10 w-full max-w-5xl mx-auto px-6 py-6 flex items-center justify-center text-xs text-slate-500">
+        <span>&copy; <span id="year"></span> &bull; Temporarily Unavailable</span>
+    </footer>
 
-    <!-- ---------- TAB 5: PREFERENCES ---------- -->
-    <section class="panel" id="panel-preferences" role="tabpanel" hidden>
-      <div class="card prefs">
-        
-        <div class="pref">
-          <div>
-            <h2>Profile Photo</h2>
-            <p>Drag & drop an image or click to select from your device.</p>
-          </div>
-          <div class="avatar-drop-zone" id="avatarDropZone">
-            <div class="preview-large-avatar" id="avatarPreviewBox"></div>
-            <div>
-              <input type="file" id="avatarFileInput" accept="image/*" style="display: none;">
-              <button type="button" class="btn ghost" style="padding: 8px 16px;" onclick="document.getElementById('avatarFileInput').click()">Choose File</button>
-            </div>
-          </div>
-        </div>
+    <!-- Minimal Interactive Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('year').textContent = new Date().getFullYear();
+        });
 
-        <div class="pref">
-          <div><h2>Scholar Name</h2><p>How you appear on the leaderboard.</p></div>
-          <input type="text" class="field" id="prefDisplayName" placeholder="Scholar alias" maxlength="28" style="max-width: 260px;">
-        </div>
-
-        <div class="pref">
-          <div><h2>Custom Bio / City</h2><p>Appears under your name on the leaderboard.</p></div>
-          <input type="text" class="field" id="prefBio" placeholder="e.g. Colombo, LK or Pure Mathematics" maxlength="80" style="max-width: 320px;">
-        </div>
-
-        <div class="pref">
-          <div>
-            <h2>Subject Management</h2>
-            <p>Customize discipline names and distinct colors.</p>
-          </div>
-          <div style="flex: 1; max-width: 440px;">
-            <div class="subject-edit-list" id="prefSubjectList"></div>
-            <form class="new-subject-form" id="newSubjectForm">
-              <input type="text" class="field" id="newSubName" placeholder="New subject name" required style="padding: 8px 12px;">
-              <div class="new-subject-form-controls">
-                <input type="color" id="newSubColor" value="#3b82f6" style="height: 38px; border: 0; background: none; cursor: pointer;">
-                <button type="submit" class="btn" style="min-width: 0; padding: 8px 18px;">Add</button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <div class="pref">
-          <div><h2>Daily Target</h2><p>Hours aimed per day (2 to 18 hours).</p></div>
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <input type="range" id="dailyGoalSlider" min="2" max="18" step="0.5" value="4" style="accent-color: var(--accent);">
-            <strong id="dailyGoalLabel" style="min-width: 4.5ch;">4.0h</strong>
-          </div>
-        </div>
-
-        <div class="pref">
-          <div><h2>Dark Mode</h2><p>Toggle between dark and light themes.</p></div>
-          <button type="button" class="switch" id="themeSwitch" role="switch" aria-checked="true"></button>
-        </div>
-
-        <div style="display: flex; justify-content: flex-end; padding-top: 14px;">
-          <button type="button" class="btn" id="btnSavePreferences" data-fx="ripple">Save Preferences</button>
-        </div>
-      </div>
-    </section>
-
-  </main>
-</div>
-
-<!-- White Noise Sounds Modal -->
-<div class="noise-modal" id="noiseModal">
-  <div class="noise-panel">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="margin: 0; font-size: 1.25rem;">White Noises</h3>
-      <button type="button" class="btn ghost" id="closeNoiseModalBtn" style="padding: 6px 12px; min-width: 0;">✕</button>
-    </div>
-    <div class="noise-grid" id="noiseGrid">
-      <!-- Populated via JS -->
-    </div>
-  </div>
-</div>
-
-<!-- Custom In-App Modal -->
-<div class="modal-overlay" id="customModal">
-  <div class="modal-card">
-    <div class="modal-icon"><i data-lucide="sparkles" id="modalIcon"></i></div>
-    <h3 id="modalTitle" style="margin: 0 0 8px; font-size: 1.25rem;">Notice</h3>
-    <p id="modalDesc" style="color: var(--muted); font-size: .92rem; margin: 0 0 24px; line-height: 1.5;"></p>
-    <div id="modalButtons" style="display: flex; flex-direction: column; gap: 10px;"></div>
-  </div>
-</div>
-
-<script src="app.js"></script>
+        function reloadPage() {
+            const icon = document.getElementById('refresh-icon');
+            icon.classList.add('fa-spin');
+            setTimeout(() => {
+                window.location.reload();
+            }, 400);
+        }
+    </script>
 </body>
 </html>
