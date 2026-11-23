@@ -1,2009 +1,33 @@
-/**
- * MORROW — Deep Focus Engine
- * - Rankings strictly by Points System (Weekly, Daily Sprint, All-Time Hall of Fame)
- * - Live "Studying Now 🟢" indicator badge on Ranking tab when timer is active
- * - Ambient White Noise Synthesizer Widget
- * - Super Admin Privileges for gethminahalangoda@gmail.com with Profile Editor & Notifications
- */
-
+/* Morrow: interface logic + Firebase (Auth and Firestore). Classic script, no build step. */
 (() => {
   "use strict";
 
-  const $ = (s, r = document) => r.querySelector(s);
+  const $  = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-  // -------------------------------------------------------------
-  // 0. ADMIN & TIERS CONFIGURATION
-  // -------------------------------------------------------------
-  const SUPER_ADMIN_EMAIL = "gethminahalangoda@gmail.com";
+  // Hooks the Firebase layer fills in (the app works without them)
+  const toastEl = document.createElement("div");
+  toastEl.className = "toast"; toastEl.setAttribute("role", "status"); document.body.appendChild(toastEl);
+  function toast(m) { toastEl.textContent = m; toastEl.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove("on"), 2800); }
+  const H = window.Morrow = { toast, beforeStart: go => go(), studying() {}, session() {}, onSubjects() {}, onTasks() {}, onPrefs() {}, onPapers() {}, onTab() {}, canStart: () => true };
 
-  function isSuperAdmin(email) {
-    return !!email && email.toLowerCase().trim() === SUPER_ADMIN_EMAIL.toLowerCase();
-  }
-
-  function isUserPremium(user) {
-    if (!user) return false;
-    if (isSuperAdmin(user.email)) return true;
-    return user.isPremium === true;
-  }
-
-  function getTierForPoints(pts) {
-    const p = Number(pts) || 0;
-    if (p >= 5000) return { name: "Morrow Elite", color: "#ec4899", bg: "rgba(236, 72, 153, 0.16)", icon: "👑" };
-    if (p >= 2500) return { name: "Diamond", color: "#00f2fe", bg: "rgba(0, 242, 254, 0.16)", icon: "💎" };
-    if (p >= 1000) return { name: "Gold", color: "#ffd700", bg: "rgba(255, 215, 0, 0.16)", icon: "🥇" };
-    if (p >= 400) return { name: "Silver", color: "#c0c0c0", bg: "rgba(192, 192, 192, 0.16)", icon: "🥈" };
-    return { name: "Bronze", color: "#cd7f32", bg: "rgba(205, 127, 50, 0.16)", icon: "🥉" };
-  }
-
-  function getVerifiedBadgeHtml(isPremium, title = "Verified Scholar") {
-    if (!isPremium) return "";
-    return `
-      <span class="tg-verified-badge" title="${title}">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-          <path d="M12 2L14.4 4.4L17.7 4.1L18.9 7.2L22 8.4L21.6 11.8L23.7 14.3L21.6 16.9L22 20.3L18.9 21.5L17.7 24.6L14.4 24.3L12 26.7L9.6 24.3L6.3 24.6L5.1 21.5L2 20.3L2.4 16.9L0.3 14.3L2.4 11.8L2 8.4L5.1 7.2L6.3 4.1L9.6 4.4L12 2Z" transform="scale(0.82) translate(2.5, 0.5)" fill="#24A1DE"/>
-          <path d="M8.5 12.5L11 15L16.5 9.5" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </span>
-    `;
-  }
-
-  function injectDynamicStyles() {
-    if ($("#morrow-dynamic-styles")) return;
-    const style = document.createElement("style");
-    style.id = "morrow-dynamic-styles";
-    style.textContent = `
-      .tg-verified-badge { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 5px; flex-shrink: 0; }
-      .tg-verified-badge svg { filter: drop-shadow(0 0 5px rgba(36, 161, 222, 0.45)); transition: transform 0.2s ease; }
-      .tg-verified-badge:hover svg { transform: scale(1.15); }
-      .tier-badge-pill {
-        font-size: 0.72rem; font-weight: 800; padding: 3px 8px; border-radius: 6px;
-        letter-spacing: 0.02em; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
-      }
-      .spin-clockwise { animation: spinClockwise 0.65s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
-      @keyframes spinClockwise { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      .refresh-lead-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 0.82rem; border-radius: 999px; cursor: pointer; transition: all 0.2s ease; }
-      .refresh-lead-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
-      .admin-topbar-broadcast-btn {
-        display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
-        background: linear-gradient(135deg, rgba(36, 161, 222, 0.2), rgba(202, 56, 56, 0.2));
-        border: 1px solid #24A1DE; color: #eef0f6; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;
-      }
-      .admin-topbar-broadcast-btn:hover { transform: scale(1.04); box-shadow: 0 0 14px rgba(36, 161, 222, 0.4); }
-      .leaderboard-row { cursor: pointer; }
-      .admin-modal-field { display: flex; flex-direction: column; gap: 4px; text-align: left; margin-bottom: 12px; }
-      .admin-modal-field label { font-size: 0.78rem; color: var(--muted); font-weight: 700; text-transform: uppercase; }
-      .admin-modal-field input, .admin-modal-field textarea, .admin-modal-field select {
-        padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-raised); color: var(--ink); font: inherit; font-size: 0.9rem; outline: none;
-      }
-      .admin-modal-field input:focus, .admin-modal-field textarea:focus { border-color: var(--accent); }
-      .in-app-toast-alert {
-        position: fixed; top: 20px; right: 20px; max-width: 380px; width: calc(100% - 40px);
-        background: var(--surface); border: 1px solid #24A1DE; box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 20px rgba(36, 161, 222, 0.35);
-        border-radius: 16px; padding: 16px 18px; z-index: 9999999; animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
-      }
-      @keyframes toastIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-      .studying-now-pill {
-        display: inline-flex; align-items: center; gap: 5px; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981;
-        color: #10b981; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; animation: pulse-studying 2s infinite;
-      }
-      @keyframes pulse-studying { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-    `;
-    document.head.appendChild(style);
-  }
-
-  // -------------------------------------------------------------
-  // AMBIENT WHITE NOISE AUDIO SYNTHESIZER
-  // -------------------------------------------------------------
-  let audioCtx = null;
-  let activeNoiseNode = null;
-  let activeNoiseGain = null;
-
-  const noiseSounds = [
-    { id: "rain", name: "Rain", icon: "cloud-rain" },
-    { id: "birds", name: "Birds", icon: "feather" },
-    { id: "fire", name: "Fireplace", icon: "flame" },
-    { id: "waves", name: "Ocean Waves", icon: "waves" },
-    { id: "cafe", name: "Cafe murmur", icon: "coffee" }
-  ];
-
-  function initWhiteNoiseWidget() {
-    const grid = $("#noiseGrid");
-    const modal = $("#noiseModal");
-    const openBtn = $("#openNoiseModalBtn");
-    const closeBtn = $("#closeNoiseModalBtn");
-
-    if (!grid || !modal) return;
-    grid.innerHTML = "";
-
-    noiseSounds.forEach(snd => {
-      const item = document.createElement("div");
-      item.className = "noise-item";
-      item.dataset.sound = snd.id;
-      item.innerHTML = `
-        <i data-lucide="${snd.icon}" style="width: 24px; height: 24px;"></i>
-        <span style="font-size: 0.78rem; font-weight: 600;">${snd.name}</span>
-      `;
-      item.addEventListener("click", () => toggleNoiseSound(snd.id, item));
-      grid.appendChild(item);
-    });
-
-    if (openBtn) openBtn.addEventListener("click", () => modal.classList.add("active"));
-    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.remove("active"));
-    lucide.createIcons();
-  }
-
-  function toggleNoiseSound(soundId, element) {
-    $$(".noise-item").forEach(el => el.classList.remove("active"));
-
-    if (activeNoiseNode) {
-      activeNoiseNode.stop();
-      activeNoiseNode.disconnect();
-      activeNoiseNode = null;
-      if (activeNoiseGain) activeNoiseGain.disconnect();
-      activeNoiseGain = null;
-    }
-
-    const wasActive = element.classList.contains("active");
-    if (!wasActive) {
-      element.classList.add("active");
-      playProceduralNoise(soundId);
-    }
-  }
-
-  function playProceduralNoise(type) {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!audioCtx) audioCtx = new AudioContext();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-
-      const bufferSize = audioCtx.sampleRate * 2;
-      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-
-      for (let i = 0; i < bufferSize; i++) {
-        if (type === 'rain') {
-          data[i] = Math.random() > 0.98 ? (Math.random() * 2 - 1) * 0.8 : (Math.random() * 2 - 1) * 0.05;
-        } else if (type === 'fire') {
-          data[i] = Math.random() > 0.99 ? (Math.random() * 2 - 1) * 0.9 : (Math.random() * 2 - 1) * 0.1;
-        } else {
-          // Pink/White noise blend for waves/cafe/birds
-          data[i] = Math.random() * 2 - 1;
-        }
-      }
-
-      activeNoiseNode = audioCtx.createBufferSource();
-      activeNoiseNode.buffer = buffer;
-      activeNoiseNode.loop = true;
-
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = type === 'rain' ? 'lowpass' : (type === 'fire' ? 'bandpass' : 'lowpass');
-      filter.frequency.value = type === 'rain' ? 1000 : (type === 'fire' ? 800 : 400);
-
-      activeNoiseGain = audioCtx.createGain();
-      activeNoiseGain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-
-      activeNoiseNode.connect(filter);
-      filter.connect(activeNoiseGain);
-      activeNoiseGain.connect(audioCtx.destination);
-
-      activeNoiseNode.start();
-    } catch (e) {
-      console.warn("Web audio notice:", e);
-    }
-  }
-
-  // -------------------------------------------------------------
-  // NATIVE OS / PHONE SYSTEM NOTIFICATIONS
-  // -------------------------------------------------------------
-  async function initSystemNotifications() {
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
-    try {
-      await navigator.serviceWorker.register('sw.js');
-      if (Notification.permission === 'default') {
-        await Notification.requestPermission();
-      }
-    } catch (err) {}
-  }
-
-  async function triggerRealOSNotification(title, message) {
-    if (!('Notification' in window)) return;
-    if (Notification.permission === 'granted') {
-      try {
-        const reg = await navigator.serviceWorker.ready;
-        reg.showNotification(title, {
-          body: message,
-          icon: 'App logo.jpg',
-          badge: 'App logo.jpg',
-          vibrate: [200, 100, 200]
-        });
-      } catch (e) {
-        new Notification(title, { body: message, icon: 'App logo.jpg' });
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 1. STATE & STORAGE
-  // -------------------------------------------------------------
-  const STORAGE_KEY = "MORROW_STATE_V11";
-
-  const defaultState = {
-    user: {
-      uid: null,
-      email: null,
-      displayName: "Scholar",
-      avatar: null,
-      bio: "Focusing deeply.",
-      presence: "online",
-      isPremium: false,
-      isAdmin: false
+  const store = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); }
+      catch (e) { return fallback; }
     },
-    settings: {
-      dailyGoalHours: 4.0,
-      theme: "dark"
-    },
-    subjects: [
-      { id: "math", name: "Mathematics", color: "#ca3838" },
-      { id: "physics", name: "Physics", color: "#2b79de" },
-      { id: "chemistry", name: "Chemistry", color: "#701385" }
-    ],
-    streak: {
-      count: 0,
-      lastStudyDate: null,
-      weekDaysDone: []
-    },
-    stats: {
-      todaySeconds: 0,
-      weekSeconds: 0,
-      totalSeconds: 0,
-      dailyPoints: 0,
-      weeklyPoints: 0,
-      allTimePoints: 0,
-      lastRecordedDate: new Date().toISOString().split("T")[0],
-      weeklyDays: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 }
-    }
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage unavailable */ } }
   };
 
-  let state = loadLocalState();
-  let sessionTasks = JSON.parse(sessionStorage.getItem("MORROW_SESSION_TASKS") || "[]");
-  let isCloudHydrated = false;
-
-  let pendingSession = {
-    seconds: 0,
-    isCompletedPomo: false,
-    timestampEnd: 0
-  };
-
-  function loadLocalState() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? { ...defaultState, ...JSON.parse(raw) } : defaultState;
-    } catch (e) {
-      return defaultState;
-    }
-  }
-
-  function saveLocalState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    if (isCloudHydrated) {
-      syncWithFirestore();
-    }
-  }
-
-  function saveSessionTasks() {
-    sessionStorage.setItem("MORROW_SESSION_TASKS", JSON.stringify(sessionTasks));
-  }
-
-  // -------------------------------------------------------------
-  // 2. CALENDAR STREAK ENGINE
-  // -------------------------------------------------------------
-  function getTodayString() {
-    return new Date().toISOString().split("T")[0];
-  }
-
-  function getYesterdayString() {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toISOString().split("T")[0];
-  }
-
-  function checkDayRoll() {
-    const today = getTodayString();
-    const yesterday = getYesterdayString();
-
-    if (state.stats.lastRecordedDate !== today) {
-      if (state.streak.lastStudyDate && state.streak.lastStudyDate !== yesterday && state.streak.lastStudyDate !== today) {
-        state.streak.count = 0;
-      }
-
-      state.stats.todaySeconds = 0;
-      state.stats.dailyPoints = 0;
-      state.stats.lastRecordedDate = today;
-
-      if (new Date().getDay() === 1) {
-        state.stats.weekSeconds = 0;
-        state.stats.weeklyPoints = 0;
-        state.stats.weeklyDays = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
-        state.streak.weekDaysDone = [];
-      }
-      saveLocalState();
-    }
-  }
-
-  function markStreakToday() {
-    const today = getTodayString();
-    const yesterday = getYesterdayString();
-    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
-
-    if (state.streak.lastStudyDate !== today) {
-      if (state.streak.lastStudyDate === yesterday) {
-        state.streak.count += 1;
-      } else {
-        state.streak.count = 1;
-      }
-      state.streak.lastStudyDate = today;
-
-      if (!state.streak.weekDaysDone.includes(dayName)) {
-        state.streak.weekDaysDone.push(dayName);
-      }
-      saveLocalState();
-      renderStreakWeek();
-    }
-  }
-
-  function renderStreakWeek() {
-    const c = state.streak.count;
-    const sideNum = $("#sideStreakNum");
-    const topText = $("#topStreakText");
-    const headTitle = $("#streakHeadTitle");
-
-    if (sideNum) sideNum.textContent = c;
-    if (topText) topText.textContent = `${c} day streak`;
-    if (headTitle) headTitle.textContent = `${c} day streak`;
-
-    const container = $("#weekDaysContainer");
-    if (!container) return;
-    container.innerHTML = "";
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const currentDayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
-
-    days.forEach(d => {
-      const isDone = state.streak.weekDaysDone.includes(d);
-      const isToday = d === currentDayName;
-      const el = document.createElement("div");
-      el.className = `day ${isDone ? "done" : ""} ${isToday ? "today" : ""}`;
-      el.innerHTML = `
-        <span class="dot">
-          <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-        </span>
-        ${d}
-      `;
-      container.appendChild(el);
-    });
-  }
-
-  // -------------------------------------------------------------
-  // 3. BACKGROUND & LOCK SCREEN ACCURATE TIMER
-  // -------------------------------------------------------------
-  let timerMode = "stopwatch";
-  let timerRunning = false;
-  let stopwatchSecs = 0;
-  let pomoRemaining = 25 * 60;
-  let activeSubId = state.subjects[0]?.id || "math";
-
-  let sessionStartTimestamp = 0;
-  let sessionBaseSeconds = 0;
-  let wakeLock = null;
-
-  let timerWorker = null;
-  try {
-    const workerBlob = new Blob([`
-      let interval = null;
-      self.onmessage = function(e) {
-        if (e.data === 'start') {
-          if (interval) clearInterval(interval);
-          interval = setInterval(() => self.postMessage('tick'), 1000);
-        } else if (e.data === 'stop') {
-          if (interval) clearInterval(interval);
-          interval = null;
-        }
-      };
-    `], { type: 'application/javascript' });
-    timerWorker = new Worker(URL.createObjectURL(workerBlob));
-    timerWorker.onmessage = () => {
-      if (timerRunning) onTimerTick();
-    };
-  } catch (err) {}
-
-  async function requestWakeLock() {
-    try {
-      if ('wakeLock' in navigator) {
-        wakeLock = await navigator.wakeLock.request('screen');
-      }
-    } catch (e) {}
-  }
-
-  function releaseWakeLock() {
-    if (wakeLock) {
-      wakeLock.release().catch(() => {});
-      wakeLock = null;
-    }
-  }
-
-  const ringProgress = $("#ringProgress");
-  const C = 2 * Math.PI * 100;
-  if (ringProgress) ringProgress.style.strokeDasharray = C.toFixed(2);
-
-  function setSubjectLock(locked) {
-    const bar = $("#subjectsBar");
-    const hint = $("#subjectLockHint");
-    if (!bar || !hint) return;
-    if (locked) {
-      bar.classList.add("timer-locked");
-      hint.classList.add("visible");
-    } else {
-      bar.classList.remove("timer-locked");
-      hint.classList.remove("visible");
-    }
-  }
-
-  function initTimer() {
-    renderSubjectsBar();
-    updateTimerDisplay();
-
-    $$("#seg button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        if (timerRunning) return;
-        $$("#seg button").forEach(b => b.setAttribute("aria-pressed", "false"));
-        btn.setAttribute("aria-pressed", "true");
-        timerMode = btn.dataset.mode;
-        placeIndicator($("#segIndicator"), btn);
-        resetTimer();
-      });
-    });
-
-    $("#startBtn").addEventListener("click", () => {
-      if (timerRunning) {
-        pauseTimer();
-      } else {
-        if (!state.user.uid) {
-          showModal(
-            "Sign in to start focusing",
-            "Please sign in with your Google account to record study time, keep your streak alive, and rank globally on points.",
-            [
-              {
-                label: "Sign In with Google",
-                primary: true,
-                action: () => {
-                  closeModal();
-                  triggerGoogleSignIn();
-                }
-              },
-              { label: "Cancel", primary: false, action: closeModal }
-            ]
-          );
-          return;
-        }
-        startTimer();
-      }
-    });
-
-    $("#resetBtn").addEventListener("click", resetTimer);
-
-    $("#saveSessionBtn").addEventListener("click", () => {
-      if (timerRunning) pauseTimer();
-      commitSessionVerification();
-    });
-
-    const claimAction = $("#claimPointsActionBtn");
-    if (claimAction) claimAction.addEventListener("click", commitSessionVerification);
-    const topClaim = $("#topClaimPointsBtn");
-    if (topClaim) topClaim.addEventListener("click", commitSessionVerification);
-
-    $("#topicInput").addEventListener("input", e => {
-      $("#activeTopicTag").textContent = e.target.value.trim() || "No topic selected";
-    });
-  }
-
-  function startTimer() {
-    timerRunning = true;
-    setSubjectLock(true);
-    $("#startBtnLabel").textContent = "Pause";
-    $("#ringWrap").classList.add("running");
-    $("#timerStatus").textContent = timerMode === "stopwatch" ? "Tracking Focus" : "Pomodoro Active";
-    setPresence("studying");
-
-    sessionStartTimestamp = Date.now();
-    sessionBaseSeconds = timerMode === "stopwatch" ? stopwatchSecs : pomoRemaining;
-
-    requestWakeLock();
-    if (timerWorker) timerWorker.postMessage('start');
-  }
-
-  function pauseTimer() {
-    timerRunning = false;
-    setSubjectLock(false);
-    if (timerWorker) timerWorker.postMessage('stop');
-    releaseWakeLock();
-
-    $("#startBtnLabel").textContent = "Resume";
-    $("#ringWrap").classList.remove("running");
-    $("#timerStatus").textContent = "Paused";
-    setPresence("online");
-
-    if (pendingSession.seconds >= 30) {
-      promptPendingPointsCard();
-    }
-  }
-
-  function resetTimer() {
-    pauseTimer();
-    stopwatchSecs = 0;
-    pomoRemaining = 25 * 60;
-    pendingSession.seconds = 0;
-    const pendingCard = $("#pendingSessionCard");
-    if (pendingCard) pendingCard.classList.remove("visible");
-    const topClaim = $("#topClaimPointsBtn");
-    if (topClaim) topClaim.style.display = "none";
-    $("#startBtnLabel").textContent = "Start";
-    $("#timerStatus").textContent = "Ready";
-    updateTimerDisplay();
-  }
-
-  function onTimerTick() {
-    const elapsed = Math.floor((Date.now() - sessionStartTimestamp) / 1000);
-
-    if (timerMode === "stopwatch") {
-      stopwatchSecs = sessionBaseSeconds + elapsed;
-      pendingSession.seconds = elapsed;
-    } else {
-      pomoRemaining = Math.max(0, sessionBaseSeconds - elapsed);
-      pendingSession.seconds = elapsed;
-
-      if (pomoRemaining === 0) {
-        pendingSession.isCompletedPomo = true;
-        pauseTimer();
-        pomoRemaining = 25 * 60;
-        commitSessionVerification();
-        return;
-      }
-    }
-
-    if (elapsed > 0 && elapsed % 60 === 0) {
-      recordFocusMinute();
-    }
-
-    updateTimerDisplay();
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (timerRunning) {
-      onTimerTick();
-    }
-  });
-
-  function updateTimerDisplay() {
-    const s = timerMode === "stopwatch" ? stopwatchSecs : pomoRemaining;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    $("#timeDigits").textContent = `${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
-
-    if (!ringProgress) return;
-    if (timerMode === "stopwatch") {
-      const f = (stopwatchSecs % 3600) / 3600;
-      ringProgress.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
-    } else {
-      const f = pomoRemaining / (25 * 60);
-      ringProgress.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
-    }
-  }
-
-  function recordFocusMinute() {
-    checkDayRoll();
-    state.stats.todaySeconds += 60;
-    state.stats.weekSeconds += 60;
-    state.stats.totalSeconds += 60;
-
-    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
-    if (state.stats.weeklyDays[dayName] !== undefined) {
-      state.stats.weeklyDays[dayName] += 60;
-    }
-
-    if (state.stats.todaySeconds >= 900) {
-      markStreakToday();
-    }
-    saveLocalState();
-  }
-
-  function calculateSessionPoints(minutes, isCompletedPomo) {
-    if (minutes <= 0) return 0;
-    const todayMinsBefore = Math.floor(state.stats.todaySeconds / 60);
-
-    let basePoints = 0;
-    for (let m = 0; m < minutes; m++) {
-      const minToday = todayMinsBefore + m;
-      if (minToday < 480) {
-        basePoints += 10;
-      } else if (minToday < 720) {
-        basePoints += 2;
-      } else {
-        basePoints += 0;
-      }
-    }
-
-    const completionBonus = isCompletedPomo ? 1.2 : 1.0;
-    const streakMult = Math.min(1.5, 1.0 + Math.max(0, state.streak.count) * 0.1);
-
-    return Math.round(basePoints * completionBonus * streakMult);
-  }
-
-  function promptPendingPointsCard() {
-    const mins = Math.max(1, Math.round(pendingSession.seconds / 60));
-    const pts = calculateSessionPoints(mins, pendingSession.isCompletedPomo);
-    const details = $("#pendingSessionDetails");
-    if (details) details.textContent = `${mins}m focused (+${pts} pts) • Claim within 5m`;
-    const pendingCard = $("#pendingSessionCard");
-    if (pendingCard) pendingCard.classList.add("visible");
-    const topClaim = $("#topClaimPointsBtn");
-    if (topClaim) topClaim.style.display = "inline-flex";
-    pendingSession.timestampEnd = Date.now();
-  }
-
-  function commitSessionVerification() {
-    if (pendingSession.seconds < 15) {
-      showModal("Session Too Short", "Study at least 1 minute to earn verified points.", [
-        { label: "OK", action: closeModal }
-      ]);
-      return;
-    }
-
-    if (pendingSession.timestampEnd && (Date.now() - pendingSession.timestampEnd) > 5 * 60 * 1000) {
-      showModal("Session Expired", "Points unverified because the 5-minute claim window lapsed.", [
-        { label: "Close", action: closeModal }
-      ]);
-      resetTimer();
-      return;
-    }
-
-    const minutes = Math.max(1, Math.round(pendingSession.seconds / 60));
-    const earnedPoints = calculateSessionPoints(minutes, pendingSession.isCompletedPomo);
-
-    state.stats.dailyPoints += earnedPoints;
-    state.stats.weeklyPoints += earnedPoints;
-    state.stats.allTimePoints += earnedPoints;
-
-    if (window.recordStudySession) {
-      window.recordStudySession(minutes, earnedPoints);
-    }
-
-    saveLocalState();
-    resetTimer();
-
-    showModal("Points Claimed!", `You earned +${earnedPoints} pts! Your global points rank has been updated.`, [
-      { label: "Awesome", action: closeModal }
-    ]);
-
-    renderProgressTab();
-    renderClassoreLeaderboard();
-  }
-
-  // -------------------------------------------------------------
-  // 4. COLOR ACCENTS & THEMING
-  // -------------------------------------------------------------
-  const hexToRgb = h => {
-    const n = parseInt(h.slice(1), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  };
-  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
-  const luminance = c => {
-    const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
-  };
-  const onColor = c => luminance(c) > 0.28 ? "#14171f" : "#ffffff";
-
-  function applyAccentColor(hex) {
-    let c = hexToRgb(hex);
-    if (state.settings.theme === "dark") c = mix(c, [255, 255, 255], 0.15);
-    const c2 = mix(c, [255, 255, 255], 0.35);
-    const root = document.documentElement.style;
-    root.setProperty("--accent", `rgb(${c.join(",")})`);
-    root.setProperty("--accent-2", `rgb(${c2.join(",")})`);
-    root.setProperty("--on-accent", onColor(c));
-    root.setProperty("--accent-soft", `rgba(${c.join(",")}, 0.14)`);
-    root.setProperty("--accent-mid", `rgba(${c.join(",")}, 0.35)`);
-    if ($("#ringProgress")) $("#ringProgress").style.stroke = `rgb(${c.join(",")})`;
-  }
-
-  function applyTheme(theme) {
-    document.documentElement.dataset.theme = theme;
-    const sw = $("#themeSwitch");
-    if (sw) sw.setAttribute("aria-checked", String(theme === "dark"));
-  }
-
-  // -------------------------------------------------------------
-  // 5. AUDIO WAVE VISUALIZER
-  // -------------------------------------------------------------
-  const waveCanvas = $("#waveCanvas");
-  const waveCtx = waveCanvas ? waveCanvas.getContext("2d") : null;
-  let waveStep = 0;
-
-  function renderWave() {
-    if (!waveCtx) return;
-    waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
-    const W = waveCanvas.width;
-    const H = waveCanvas.height;
-    const cx = W / 2;
-    const cy = H / 2;
-    const radius = 96;
-
-    if (timerRunning) {
-      waveStep += 0.04;
-      const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#ca3838";
-
-      for (let layer = 0; layer < 3; layer++) {
-        waveCtx.beginPath();
-        waveCtx.strokeStyle = accent;
-        waveCtx.globalAlpha = 0.25 - layer * 0.06;
-        waveCtx.lineWidth = 2.5;
-
-        for (let a = 0; a <= Math.PI * 2; a += 0.04) {
-          const freq = 6 + layer * 2;
-          const amp = 5.5 * Math.sin(a * freq + waveStep + layer);
-          const r = radius + amp;
-          const x = cx + r * Math.cos(a);
-          const y = cy + r * Math.sin(a);
-          if (a === 0) waveCtx.moveTo(x, y);
-          else waveCtx.lineTo(x, y);
-        }
-        waveCtx.closePath();
-        waveCtx.stroke();
-      }
-      waveCtx.globalAlpha = 1.0;
-    }
-    requestAnimationFrame(renderWave);
-  }
-
-  // -------------------------------------------------------------
-  // 6. SUBJECTS & ALL-SUBJECTS FILTERING
-  // -------------------------------------------------------------
-  let currentSubjectFilter = "all";
-
-  function renderSubjectsBar() {
-    const bar = $("#subjectsBar");
-    const taskSelect = $("#taskSubSelect");
-    const filterPills = $("#subjectFilterPills");
-    if (!bar || !taskSelect || !filterPills) return;
-    bar.innerHTML = "";
-    taskSelect.innerHTML = "";
-
-    state.subjects.forEach(s => {
-      const chip = document.createElement("span");
-      chip.className = `chip ${s.id === activeSubId ? "on" : ""}`;
-      chip.style.setProperty("--c", s.color);
-      chip.style.setProperty("--oc", onColor(hexToRgb(s.color)));
-      chip.innerHTML = `
-        <button type="button" class="chip-main">
-          <i class="chip-dot"></i><span>${s.name}</span>
-        </button>
-      `;
-
-      chip.querySelector("button").addEventListener("click", () => {
-        if (timerRunning) {
-          showModal("Timer Active", "Subject switching is locked during active focus. Pause or save the session first.", [
-            { label: "Got it", action: closeModal }
-          ]);
-          return;
-        }
-        activeSubId = s.id;
-        applyAccentColor(s.color);
-        renderSubjectsBar();
-      });
-      bar.appendChild(chip);
-
-      const opt = document.createElement("option");
-      opt.value = s.id;
-      opt.textContent = s.name;
-      taskSelect.appendChild(opt);
-    });
-
-    filterPills.innerHTML = "";
-    const allPill = document.createElement("span");
-    allPill.className = `sub-filter-item ${currentSubjectFilter === "all" ? "active" : ""}`;
-    allPill.dataset.sub = "all";
-    allPill.textContent = "All Subjects";
-    allPill.addEventListener("click", () => {
-      currentSubjectFilter = "all";
-      $$(".sub-filter-item").forEach(p => p.classList.remove("active"));
-      allPill.classList.add("active");
-      renderClassoreLeaderboard();
-    });
-    filterPills.appendChild(allPill);
-
-    state.subjects.forEach(s => {
-      const fp = document.createElement("span");
-      fp.className = `sub-filter-item ${currentSubjectFilter === s.id ? "active" : ""}`;
-      fp.dataset.sub = s.id;
-      fp.textContent = s.name;
-      fp.addEventListener("click", () => {
-        currentSubjectFilter = s.id;
-        $$(".sub-filter-item").forEach(p => p.classList.remove("active"));
-        fp.classList.add("active");
-        renderClassoreLeaderboard();
-      });
-      filterPills.appendChild(fp);
-    });
-
-    renderPrefSubjectList();
-  }
-
-  function renderPrefSubjectList() {
-    const prefList = $("#prefSubjectList");
-    if (!prefList) return;
-    prefList.innerHTML = "";
-
-    state.subjects.forEach(s => {
-      const row = document.createElement("div");
-      row.className = "subject-edit-item";
-      row.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="width: 12px; height: 12px; border-radius: 50%; background: ${s.color};"></span>
-          <strong>${s.name}</strong>
-        </div>
-        <button type="button" class="del-task-btn" title="Remove"><i data-lucide="trash-2" style="width: 14px; height: 14px;"></i></button>
-      `;
-      row.querySelector("button").addEventListener("click", () => {
-        if (state.subjects.length <= 1) {
-          showModal("Notice", "You must keep at least one subject.", [{ label: "OK", action: closeModal }]);
-          return;
-        }
-        state.subjects = state.subjects.filter(sub => sub.id !== s.id);
-        if (activeSubId === s.id) activeSubId = state.subjects[0].id;
-        saveLocalState();
-        renderSubjectsBar();
-      });
-      prefList.appendChild(row);
-    });
-    lucide.createIcons();
-  }
-
-  const newSubForm = $("#newSubjectForm");
-  if (newSubForm) {
-    newSubForm.addEventListener("submit", e => {
-      e.preventDefault();
-      const name = $("#newSubName").value.trim();
-      const color = $("#newSubColor").value;
-      if (!name) return;
-
-      state.subjects.push({
-        id: "sub_" + Date.now().toString(36),
-        name,
-        color
-      });
-      saveLocalState();
-      $("#newSubName").value = "";
-      renderSubjectsBar();
-    });
-  }
-
-  // -------------------------------------------------------------
-  // 7. STUDY TASKS
-  // -------------------------------------------------------------
-  function renderTasks() {
-    const list = $("#taskList");
-    const empty = $("#taskEmpty");
-    if (!list || !empty) return;
-    list.innerHTML = "";
-    empty.hidden = sessionTasks.length > 0;
-
-    sessionTasks.forEach(t => {
-      const sub = state.subjects.find(s => s.id === t.subjectId) || { name: "General", color: "#ca3838" };
-      const li = document.createElement("li");
-      li.className = `task ${t.done ? "done" : ""}`;
-      li.innerHTML = `
-        <button type="button" class="check" aria-checked="${t.done}">
-          <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-        </button>
-        <span class="task-text">${t.text}</span>
-        <span class="task-badge" style="background:${sub.color}22; color:${sub.color}">${sub.name}</span>
-        <button type="button" class="del-task-btn"><i data-lucide="x" style="width: 14px; height: 14px;"></i></button>
-      `;
-
-      li.querySelector(".check").addEventListener("click", () => {
-        t.done = !t.done;
-        saveSessionTasks();
-        renderTasks();
-      });
-
-      li.querySelector(".del-task-btn").addEventListener("click", () => {
-        sessionTasks = sessionTasks.filter(item => item.id !== t.id);
-        saveSessionTasks();
-        renderTasks();
-      });
-
-      list.appendChild(li);
-    });
-    lucide.createIcons();
-  }
-
-  const taskForm = $("#taskForm");
-  if (taskForm) {
-    taskForm.addEventListener("submit", e => {
-      e.preventDefault();
-      const text = $("#taskInput").value.trim();
-      const subjectId = $("#taskSubSelect").value;
-      if (!text) return;
-
-      sessionTasks.push({ id: Date.now(), text, subjectId, done: false });
-      saveSessionTasks();
-      $("#taskInput").value = "";
-      renderTasks();
-    });
-  }
-
-  function clearCompletedTasks() {
-    if (sessionTasks.some(t => t.done)) {
-      sessionTasks = sessionTasks.filter(t => !t.done);
-      saveSessionTasks();
-      renderTasks();
-    }
-  }
-  document.addEventListener("visibilitychange", () => { if (document.hidden) clearCompletedTasks(); });
-  window.addEventListener("pagehide", clearCompletedTasks);
-
-  // -------------------------------------------------------------
-  // 8. PROGRESS TAB & BAR GRAPH
-  // -------------------------------------------------------------
-  function renderProgressTab() {
-    const todayHrs = state.stats.todaySeconds / 3600;
-    const weekHrs = state.stats.weekSeconds / 3600;
-    const goal = state.settings.dailyGoalHours;
-
-    const statToday = $("#statToday");
-    const statWeek = $("#statWeek");
-    const statPts = $("#statTotalPts");
-    const badge = $("#chartTotalBadge");
-
-    if (statToday) statToday.textContent = `${Math.floor(todayHrs)}h ${Math.round((todayHrs % 1) * 60)}m`;
-    if (statWeek) statWeek.textContent = `${Math.floor(weekHrs)}h ${Math.round((weekHrs % 1) * 60)}m`;
-    if (statPts) statPts.textContent = `${state.stats.weeklyPoints} Pts`;
-    if (badge) badge.textContent = `${weekHrs.toFixed(1)}h total`;
-
-    const goalRatio = $("#goalTextRatio");
-    const goalPct = $("#goalPercent");
-    const meterBar = $("#goalMeterBar");
-
-    if (goalRatio) goalRatio.textContent = `${todayHrs.toFixed(1)}h of ${goal.toFixed(1)}h`;
-    const pct = Math.min(100, Math.round((todayHrs / goal) * 100));
-    if (goalPct) goalPct.textContent = `${pct}%`;
-    if (meterBar) meterBar.style.width = `${pct}%`;
-
-    renderRestoredBarGraph();
-  }
-
-  function renderRestoredBarGraph() {
-    const container = $("#weeklyBarsContainer");
-    if (!container) return;
-    container.innerHTML = "";
-
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const currentDayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
-
-    const vals = days.map(d => (state.stats.weeklyDays[d] || 0) / 3600);
-    const maxVal = Math.max(2, ...vals);
-
-    days.forEach((day, idx) => {
-      const hours = vals[idx];
-      let percent = Math.min(100, Math.round((hours / maxVal) * 100));
-      if (hours > 0 && percent < 6) percent = 6;
-
-      const isToday = day === currentDayName;
-
-      const col = document.createElement("div");
-      col.className = `col ${isToday ? "today" : ""}`;
-      col.innerHTML = `
-        <div class="well">
-          <i style="--h: ${percent}%; --n: ${idx};" title="${day}: ${hours.toFixed(1)}h"></i>
-        </div>
-        ${day}
-      `;
-      container.appendChild(col);
-    });
-  }
-
-  // -------------------------------------------------------------
-  // 9. CLASSORE LEADERBOARD (RANKING STRICTLY BY POINTS & TIERS)
-  // -------------------------------------------------------------
-  let currentLeague = "weekly";
-  let cachedLeaderboardUsers = [];
-
-  function initClassoreLeagues() {
-    $$(".league-tab-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        $$(".league-tab-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        currentLeague = btn.dataset.league;
-        renderClassoreLeaderboard();
-      });
-    });
-
-    const filterBar = $(".classore-filter-bar");
-    if (filterBar) {
-      let refreshBtn = $("#btnRefreshLeaderboard");
-      if (!refreshBtn) {
-        refreshBtn = document.createElement("button");
-        refreshBtn.id = "btnRefreshLeaderboard";
-        refreshBtn.type = "button";
-        refreshBtn.className = "btn ghost refresh-lead-btn";
-        refreshBtn.title = "Reload Leaderboard Data";
-        refreshBtn.innerHTML = `<i data-lucide="rotate-cw" style="width:14px;height:14px;"></i><span>Refresh</span>`;
-
-        const authContainer = $("#authContainer");
-        if (authContainer) {
-          filterBar.insertBefore(refreshBtn, authContainer);
-        } else {
-          filterBar.appendChild(refreshBtn);
-        }
-
-        refreshBtn.addEventListener("click", async () => {
-          const icon = refreshBtn.querySelector("i, svg");
-          if (icon) icon.classList.add("spin-clockwise");
-          await forceRefreshLeaderboard();
-          setTimeout(() => {
-            if (icon) icon.classList.remove("spin-clockwise");
-          }, 650);
-        });
-      }
-
-      let broadcastBtn = $("#btnAdminBroadcast");
-      if (state.user.isAdmin && !broadcastBtn) {
-        broadcastBtn = document.createElement("button");
-        broadcastBtn.id = "btnAdminBroadcast";
-        broadcastBtn.type = "button";
-        broadcastBtn.className = "admin-topbar-broadcast-btn";
-        broadcastBtn.title = "Admin: Send In-App & Push Notification";
-        broadcastBtn.innerHTML = `<span>📢 Broadcast</span>`;
-        broadcastBtn.addEventListener("click", () => {
-          openNotificationComposerModal(null);
-        });
-
-        const authContainer = $("#authContainer");
-        if (authContainer) {
-          filterBar.insertBefore(broadcastBtn, authContainer);
-        } else {
-          filterBar.appendChild(broadcastBtn);
-        }
-      }
-      lucide.createIcons();
-    }
-  }
-
-  function renderAvatar(container, user, size = "40px") {
-    if (!container) return;
-    container.innerHTML = "";
-    if (user.avatar) {
-      const img = document.createElement("img");
-      img.src = user.avatar;
-      img.style.width = size;
-      img.style.height = size;
-      img.style.borderRadius = "50%";
-      img.style.objectFit = "cover";
-      container.appendChild(img);
-    } else {
-      const initials = (user.displayName || "S").slice(0, 2).toUpperCase();
-      container.textContent = initials;
-      container.style.display = "grid";
-      container.style.placeItems = "center";
-      container.style.background = "var(--accent-soft)";
-      container.style.color = "var(--ink)";
-      container.style.fontWeight = "700";
-    }
-  }
-
-  function extractUserPoints(user, league) {
-    if (league === "daily") {
-      return user.dailyPoints ?? user.points ?? 0;
-    } else if (league === "alltime") {
-      return user.allTimePoints ?? user.points ?? user.weeklyPoints ?? 0;
-    } else {
-      return user.weeklyPoints ?? user.points ?? user.allTimePoints ?? 0;
-    }
-  }
-
-  function renderClassoreLeaderboard() {
-    const listEl = $("#classoreLeaderboardRows");
-    if (!listEl) return;
-    listEl.innerHTML = "";
-
-    let fullList = [...cachedLeaderboardUsers];
-    const meExists = fullList.some(u => u.uid === state.user.uid);
-    if (!meExists) {
-      fullList.push({
-        uid: state.user.uid || "local_me",
-        email: state.user.email,
-        displayName: state.user.displayName,
-        avatar: state.user.avatar,
-        bio: state.user.bio || "Local Scholar",
-        points: state.stats.weeklyPoints,
-        dailyPoints: state.stats.dailyPoints,
-        weeklyPoints: state.stats.weeklyPoints,
-        allTimePoints: state.stats.allTimePoints,
-        streak: state.streak.count,
-        weeklyHours: state.stats.weekSeconds / 3600,
-        isPremium: isUserPremium(state.user)
-      });
-    }
-
-    if (currentSubjectFilter !== "all") {
-      fullList = fullList.filter(u => u.activeSubject === currentSubjectFilter || true);
-    }
-
-    // RANK STRICTLY BY POINTS
-    fullList.sort((a, b) => extractUserPoints(b, currentLeague) - extractUserPoints(a, currentLeague));
-
-    let myRank = -1;
-    let pointsBehind = 0;
-    let personAboveName = "";
-
-    fullList.forEach((user, idx) => {
-      const rank = idx + 1;
-      const isMe = user.uid === (state.user.uid || "local_me");
-      const userPts = extractUserPoints(user, currentLeague);
-      const userTier = getTierForPoints(userPts);
-      const userIsVerified = isUserPremium(user);
-
-      if (isMe) {
-        myRank = rank;
-        if (idx > 0) {
-          const aboveUser = fullList[idx - 1];
-          pointsBehind = extractUserPoints(aboveUser, currentLeague) - userPts;
-          personAboveName = aboveUser.displayName || `#${rank - 1}`;
-        }
-      }
-
-      const row = document.createElement("div");
-      row.className = `leaderboard-row ${isMe ? "is-me" : ""}`;
-
-      let rankHtml = `<span>${rank}</span>`;
-      if (rank === 1) rankHtml = `<span class="badge-gold">★ 1</span>`;
-      else if (rank === 2) rankHtml = `<span class="badge-silver">★ 2</span>`;
-      else if (rank === 3) rankHtml = `<span class="badge-bronze">★ 3</span>`;
-
-      // Studying Now Indicator Pill if timer is actively running on this user session
-      let studyingNowHtml = "";
-      if (isMe && timerRunning) {
-        studyingNowHtml = `<span class="studying-now-pill">🟢 Studying Now</span>`;
-      }
-
-      row.innerHTML = `
-        <div class="row-user-info">
-          <div class="rank-badge-wrap">${rankHtml}</div>
-          <div class="user-row-avatar" id="classoreRowAv_${rank}"></div>
-          <div style="min-width:0; flex:1;">
-            <div class="user-name-title" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-              <span>${user.displayName || "Scholar"} ${isMe ? "(You)" : ""}</span>
-              ${getVerifiedBadgeHtml(userIsVerified)}
-              <span class="tier-badge-pill" style="color: ${userTier.color}; background: ${userTier.bg}; border: 1px solid ${userTier.color}44;">
-                ${userTier.icon} ${userTier.name}
-              </span>
-              ${studyingNowHtml}
-            </div>
-            <div class="user-sub-location">${user.bio || "Scholar"}</div>
-          </div>
-        </div>
-        <div class="points-pill">• ${userPts} Pts</div>
-      `;
-
-      row.addEventListener("click", () => {
-        openScholarProfileModal(user);
-      });
-
-      listEl.appendChild(row);
-      renderAvatar($(`#classoreRowAv_${rank}`), user, "38px");
-    });
-
-    const cardName = $("#classoreUserName");
-    const userPts = extractUserPoints(state.user, currentLeague);
-    const myTier = getTierForPoints(userPts);
-    const userIsVerified = isUserPremium(state.user);
-    const studyingBadgeMe = timerRunning ? `<div style="margin-top: 4px;"><span class="studying-now-pill">🟢 Studying Now</span></div>` : "";
-
-    if (cardName) {
-      cardName.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;">
-          <span>${state.user.displayName} (You)</span>
-          ${getVerifiedBadgeHtml(userIsVerified)}
-        </div>
-        <div style="margin-top: 4px;">
-          <span class="tier-badge-pill" style="color: ${myTier.color}; background: ${myTier.bg}; border: 1px solid ${myTier.color}44;">
-            ${myTier.icon} ${myTier.name} Tier
-          </span>
-        </div>
-        ${studyingBadgeMe}
-      `;
-    }
-
-    const cardBio = $("#classoreUserBio");
-    if (cardBio) cardBio.textContent = state.user.bio || "Local Scholar";
-    renderAvatar($("#classoreUserAvatar"), state.user, "70px");
-
-    const tRank = $("#classoreTileRank");
-    const tStreak = $("#classoreTileStreak");
-    const tPoints = $("#classoreTilePoints");
-    const tTime = $("#classoreTileTime");
-
-    if (tRank) tRank.textContent = myRank > 0 ? `#${myRank}` : "--";
-    if (tStreak) tStreak.textContent = state.streak.count;
-    if (tPoints) tPoints.textContent = userPts;
-    if (tTime) tTime.textContent = `${(state.stats.weekSeconds / 3600).toFixed(1)}h`;
-
-    const banner = $("#classoreRelativeBanner");
-    if (banner) {
-      if (myRank === 1) {
-        banner.textContent = `🏆 You are #1 on the leaderboard with ${userPts} pts!`;
-      } else if (myRank > 1) {
-        banner.textContent = `You are #${myRank} (${userPts} pts) — ${pointsBehind} pts behind ${personAboveName}`;
-      } else {
-        banner.textContent = "Complete a focus session to earn points and rank globally.";
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 10. SCHOLAR PROFILE & ADMIN STAT EDITOR
-  // -------------------------------------------------------------
-  function openScholarProfileModal(user) {
-    const isMe = user.uid === state.user.uid;
-    const isOwner = isSuperAdmin(state.user.email);
-    const verified = isUserPremium(user);
-    const weeklyPts = extractUserPoints(user, "weekly");
-    const weeklyHours = user.weeklyHours ?? ((user.totalStudyTime || 0) / 60) ?? 0;
-    const streak = user.streak ?? 0;
-    const tier = getTierForPoints(weeklyPts);
-
-    let adminFormHtml = "";
-    if (isOwner) {
-      adminFormHtml = `
-        <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line-strong);">
-          <div style="font-size: 0.8rem; font-weight: 800; color: #24A1DE; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <span>👑 ADMIN STAT EDITOR</span>
-            <span>${user.email || user.uid}</span>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="admin-modal-field">
-              <label>Weekly Points</label>
-              <input type="number" id="admEditPoints" value="${weeklyPts}">
-            </div>
-            <div class="admin-modal-field">
-              <label>Streak (Days)</label>
-              <input type="number" id="admEditStreak" value="${streak}">
-            </div>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div class="admin-modal-field">
-              <label>Weekly Hours</label>
-              <input type="number" step="0.1" id="admEditHours" value="${weeklyHours.toFixed(1)}">
-            </div>
-            <div class="admin-modal-field">
-              <label>Verified / Premium</label>
-              <select id="admEditVerified">
-                <option value="true" ${verified ? 'selected' : ''}>Verified (Blue Badge)</option>
-                <option value="false" ${!verified ? 'selected' : ''}>Standard</option>
-              </select>
-            </div>
-          </div>
-
-          <div style="display: flex; gap: 8px; margin-top: 10px;">
-            <button type="button" class="btn" id="admBtnSaveUser" style="flex: 1; padding: 10px;">Save Changes</button>
-            <button type="button" class="btn ghost" id="admBtnSendDM" style="padding: 10px;">💬 Message</button>
-          </div>
-        </div>
-      `;
-    }
-
-    const modalContent = `
-      <div style="display: flex; flex-direction: column; align-items: center; text-align: center;">
-        <div class="profile-card-avatar" style="width: 64px; height: 64px; margin-bottom: 8px;" id="modalAvatarBox"></div>
-        <h3 style="margin: 0; font-size: 1.25rem;">
-          ${user.displayName || "Scholar"}
-          ${getVerifiedBadgeHtml(verified)}
-        </h3>
-        <div style="margin: 6px 0 16px;">
-          <span class="tier-badge-pill" style="color: ${tier.color}; background: ${tier.bg}; border: 1px solid ${tier.color}44;">
-            ${tier.icon} ${tier.name} Tier
-          </span>
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%;">
-          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
-            <div style="font-size: 0.75rem; color: var(--muted);">Points</div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: #10b981;">${weeklyPts}</div>
-          </div>
-          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
-            <div style="font-size: 0.75rem; color: var(--muted);">Focus</div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: var(--accent);">${weeklyHours.toFixed(1)}h</div>
-          </div>
-          <div style="background: var(--surface-raised); padding: 10px; border-radius: 12px; border: 1px solid var(--line);">
-            <div style="font-size: 0.75rem; color: var(--muted);">Streak</div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: var(--flame);">${streak}d</div>
-          </div>
-        </div>
-
-        ${adminFormHtml}
-      </div>
-    `;
-
-    showModal("Scholar Profile", modalContent, [
-      { label: "Close", primary: false, action: closeModal }
-    ], true);
-
-    renderAvatar($("#modalAvatarBox"), user, "64px");
-
-    if (isOwner) {
-      const btnSave = $("#admBtnSaveUser");
-      if (btnSave) {
-        btnSave.addEventListener("click", async () => {
-          const newPts = parseInt($("#admEditPoints").value) || 0;
-          const newStreak = parseInt($("#admEditStreak").value) || 0;
-          const newHrs = parseFloat($("#admEditHours").value) || 0;
-          const newVerified = $("#admEditVerified").value === "true";
-
-          btnSave.textContent = "Saving...";
-          const db = firebase.firestore();
-
-          try {
-            await db.collection("users").doc(user.uid).set({
-              points: newPts,
-              weeklyPoints: newPts,
-              allTimePoints: newPts,
-              dailyPoints: newPts,
-              streak: newStreak,
-              weeklyHours: newHrs,
-              totalStudyTime: Math.round(newHrs * 60),
-              isPremium: newVerified,
-              lastActive: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            if (isMe) {
-              state.stats.weeklyPoints = newPts;
-              state.streak.count = newStreak;
-              state.stats.weekSeconds = Math.round(newHrs * 3600);
-              state.user.isPremium = newVerified;
-              saveLocalState();
-            }
-
-            const target = cachedLeaderboardUsers.find(u => u.uid === user.uid);
-            if (target) {
-              target.points = newPts;
-              target.weeklyPoints = newPts;
-              target.streak = newStreak;
-              target.weeklyHours = newHrs;
-              target.isPremium = newVerified;
-            }
-
-            renderClassoreLeaderboard();
-            closeModal();
-            showInAppToast("Admin Notice", `Updated stats for ${user.displayName || "user"}!`);
-          } catch (err) {
-            console.error("Admin update error:", err);
-            alert("Error saving: check Firestore security rules to allow admin writes.");
-            btnSave.textContent = "Save Changes";
-          }
-        });
-      }
-
-      const btnDM = $("#admBtnSendDM");
-      if (btnDM) {
-        btnDM.addEventListener("click", () => {
-          closeModal();
-          openNotificationComposerModal(user);
-        });
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 11. NOTIFICATIONS COMPOSER (BROADCAST & DIRECT)
-  // -------------------------------------------------------------
-  function openNotificationComposerModal(targetUser = null) {
-    if (!state.user.isAdmin) return;
-
-    const isGlobal = !targetUser;
-    const recipientLabel = isGlobal 
-      ? "📢 All Scholars (Global Broadcast)" 
-      : `👤 ${targetUser.displayName || "Scholar"} (${targetUser.email || targetUser.uid})`;
-
-    const modalContent = `
-      <div style="text-align: left;">
-        <div style="font-size: 0.8rem; font-weight: 700; color: #24A1DE; margin-bottom: 14px;">
-          RECIPIENT: ${recipientLabel}
-        </div>
-
-        <div class="admin-modal-field">
-          <label>Notification Title</label>
-          <input type="text" id="notifInputTitle" placeholder="e.g. Focus Sprint Announcement" maxlength="60" required>
-        </div>
-
-        <div class="admin-modal-field">
-          <label>Message Content</label>
-          <textarea id="notifInputMessage" rows="3" placeholder="Write your announcement or notice here..." maxlength="240" required></textarea>
-        </div>
-
-        <button type="button" class="btn" id="btnSubmitSendNotif" style="width: 100%; margin-top: 8px;">
-          Send Notification
-        </button>
-      </div>
-    `;
-
-    showModal(isGlobal ? "Broadcast to Website" : "Direct Message", modalContent, [
-      { label: "Cancel", primary: false, action: closeModal }
-    ], true);
-
-    const btnSubmit = $("#btnSubmitSendNotif");
-    if (btnSubmit) {
-      btnSubmit.addEventListener("click", async () => {
-        const title = $("#notifInputTitle").value.trim();
-        const message = $("#notifInputMessage").value.trim();
-        if (!title || !message) {
-          alert("Please fill in both the title and message.");
-          return;
-        }
-
-        btnSubmit.textContent = "Sending...";
-        const db = firebase.firestore();
-
-        try {
-          await db.collection("notifications").add({
-            title: title,
-            message: message,
-            targetUid: isGlobal ? "all" : targetUser.uid,
-            senderEmail: SUPER_ADMIN_EMAIL,
-            senderName: "Gethmina Halangoda (Admin)",
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-
-          closeModal();
-          showInAppToast("Notification Dispatched", isGlobal ? "Global announcement sent to all users!" : `Direct message delivered to ${targetUser.displayName}!`);
-        } catch (err) {
-          console.error("Notification dispatch error:", err);
-          alert("Could not dispatch notification. Make sure Firestore rules allow writes to the 'notifications' collection.");
-          btnSubmit.textContent = "Send Notification";
-        }
-      });
-    }
-  }
-
-  function initRealtimeNotificationsListener() {
-    if (!window.firebase || !firebase.apps.length) return;
-    const db = firebase.firestore();
-
-    db.collection("notifications")
-      .orderBy("createdAt", "desc")
-      .limit(6)
-      .onSnapshot(snap => {
-        snap.docChanges().forEach(change => {
-          if (change.type === "added") {
-            const data = change.doc.data();
-            const notifId = change.doc.id;
-
-            const isForMe = data.targetUid === "all" || (state.user.uid && data.targetUid === state.user.uid);
-            const hasSeen = localStorage.getItem("morrow_seen_notif_" + notifId);
-
-            if (isForMe && !hasSeen) {
-              localStorage.setItem("morrow_seen_notif_" + notifId, "true");
-              showInAppToast(data.title, data.message, data.senderName);
-              triggerRealOSNotification(data.title, data.message);
-            }
-          }
-        });
-      }, err => console.warn("Notifications listener:", err));
-  }
-
-  function showInAppToast(title, message, sender = "Admin Notice") {
-    const existing = $(".in-app-toast-alert");
-    if (existing) existing.remove();
-
-    const toast = document.createElement("div");
-    toast.className = "in-app-toast-alert";
-    toast.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <span style="font-size: 1rem;">🔔</span>
-          <strong style="font-size: 0.95rem; color: #24A1DE;">${title}</strong>
-        </div>
-        <button type="button" class="del-task-btn" style="padding: 2px;" id="btnToastDismiss">
-          <i data-lucide="x" style="width: 14px; height: 14px;"></i>
-        </button>
-      </div>
-      <p style="margin: 0; font-size: 0.85rem; color: var(--ink); line-height: 1.4;">${message}</p>
-      <div style="margin-top: 6px; font-size: 0.72rem; color: var(--muted); text-align: right;">${sender}</div>
-    `;
-
-    document.body.appendChild(toast);
-    lucide.createIcons();
-
-    const btnDismiss = $("#btnToastDismiss");
-    if (btnDismiss) btnDismiss.addEventListener("click", () => toast.remove());
-    setTimeout(() => {
-      if (toast.parentNode) toast.remove();
-    }, 9000);
-  }
-
-  // -------------------------------------------------------------
-  // 12. MANUAL LEADERBOARD REFRESH
-  // -------------------------------------------------------------
-  async function forceRefreshLeaderboard() {
-    if (!window.firebase || !firebase.apps.length) return;
-    const db = firebase.firestore();
-
-    try {
-      const snap = await db.collection("users").limit(50).get({ source: "server" });
-      cachedLeaderboardUsers = [];
-      snap.forEach(doc => {
-        const data = doc.data();
-        const userEmail = data.email || "";
-        cachedLeaderboardUsers.push({
-          uid: doc.id,
-          email: userEmail,
-          displayName: data.displayName || "Scholar",
-          avatar: data.avatar || null,
-          bio: data.bio || "Scholar",
-          points: data.points ?? data.weeklyPoints ?? 0,
-          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
-          dailyPoints: data.dailyPoints ?? data.points ?? 0,
-          allTimePoints: data.allTimePoints ?? data.points ?? 0,
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
-          streak: data.streak || 0,
-          isPremium: isSuperAdmin(userEmail) || data.isPremium === true
-        });
-      });
-      renderClassoreLeaderboard();
-      console.log("[MORROW] Forced server refresh on leaderboard.");
-    } catch (err) {
-      const snap = await db.collection("users").limit(50).get();
-      cachedLeaderboardUsers = [];
-      snap.forEach(doc => {
-        const data = doc.data();
-        const userEmail = data.email || "";
-        cachedLeaderboardUsers.push({
-          uid: doc.id,
-          email: userEmail,
-          displayName: data.displayName || "Scholar",
-          avatar: data.avatar || null,
-          bio: data.bio || "Scholar",
-          points: data.points ?? data.weeklyPoints ?? 0,
-          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
-          dailyPoints: data.dailyPoints ?? data.points ?? 0,
-          allTimePoints: data.allTimePoints ?? data.points ?? 0,
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
-          streak: data.streak || 0,
-          isPremium: isSuperAdmin(userEmail) || data.isPremium === true
-        });
-      });
-      renderClassoreLeaderboard();
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 13. CLOUD-FIRST FIRESTORE HYDRATION & SYNC
-  // -------------------------------------------------------------
-  function setPresence(status) {
-    state.user.presence = status;
-    const dot = $("#sidePresence");
-    if (dot) dot.className = `presence-dot ${status}`;
-    if (window.updateCloudPresence) {
-      window.updateCloudPresence(status);
-    }
-  }
-
-  async function syncWithFirestore() {
-    if (!window.firebase || !firebase.apps.length || !state.user.uid || !isCloudHydrated) return;
-    try {
-      const db = firebase.firestore();
-      const isOwner = isSuperAdmin(state.user.email);
-      const isPremiumUser = isOwner || state.user.isPremium;
-
-      await db.collection("users").doc(state.user.uid).set({
-        email: state.user.email || "",
-        displayName: state.user.displayName,
-        avatar: state.user.avatar,
-        bio: state.user.bio,
-        weeklyHours: state.stats.weekSeconds / 3600,
-        todaySeconds: state.stats.todaySeconds,
-        totalSeconds: state.stats.totalSeconds,
-        points: state.stats.weeklyPoints,
-        dailyPoints: state.stats.dailyPoints,
-        weeklyPoints: state.stats.weeklyPoints,
-        allTimePoints: state.stats.allTimePoints,
-        totalStudyTime: Math.round(state.stats.totalSeconds / 60),
-        streak: state.streak.count,
-        weekDaysDone: state.streak.weekDaysDone,
-        lastStudyDate: state.streak.lastStudyDate,
-        subjects: state.subjects,
-        presence: state.user.presence,
-        isPremium: isPremiumUser,
-        role: isOwner ? "admin" : "scholar",
-        lastActive: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    } catch (e) {
-      console.warn("Firestore sync notice:", e);
-    }
-  }
-
-  async function hydrateUserFromCloud(uid) {
-    if (!window.firebase || !firebase.apps.length || !uid) return;
-    const db = firebase.firestore();
-
-    try {
-      const docSnap = await db.collection("users").doc(uid).get();
-
-      if (docSnap.exists) {
-        const cloud = docSnap.data();
-
-        const cloudWeeklyPts = cloud.weeklyPoints ?? cloud.points ?? 0;
-        const cloudDailyPts = cloud.dailyPoints ?? cloud.points ?? 0;
-        const cloudAllTimePts = cloud.allTimePoints ?? cloud.points ?? 0;
-        const cloudTotalSecs = cloud.totalSeconds ?? ((cloud.totalStudyTime || 0) * 60) ?? 0;
-        const cloudWeekSecs = Math.round((cloud.weeklyHours || 0) * 3600) || cloudTotalSecs;
-
-        state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, cloudWeeklyPts);
-        state.stats.dailyPoints = Math.max(state.stats.dailyPoints, cloudDailyPts);
-        state.stats.allTimePoints = Math.max(state.stats.allTimePoints, cloudAllTimePts);
-        state.stats.weekSeconds = Math.max(state.stats.weekSeconds, cloudWeekSecs);
-        state.stats.totalSeconds = Math.max(state.stats.totalSeconds, cloudTotalSecs);
-
-        if (cloud.streak !== undefined) {
-          state.streak.count = Math.max(state.streak.count, cloud.streak);
-        }
-        if (cloud.weekDaysDone && Array.isArray(cloud.weekDaysDone)) {
-          state.streak.weekDaysDone = Array.from(new Set([...state.streak.weekDaysDone, ...cloud.weekDaysDone]));
-        }
-        if (cloud.lastStudyDate) state.streak.lastStudyDate = cloud.lastStudyDate;
-        if (cloud.displayName) state.user.displayName = cloud.displayName;
-        if (cloud.avatar) state.user.avatar = cloud.avatar;
-        if (cloud.bio) state.user.bio = cloud.bio;
-        if (cloud.subjects && cloud.subjects.length) state.subjects = cloud.subjects;
-
-        if (cloud.isPremium || isSuperAdmin(state.user.email)) {
-          state.user.isPremium = true;
-        }
-
-        console.log(`[MORROW] Hydrated user state from cloud: ${state.stats.weeklyPoints} pts, ${state.streak.count} day streak.`);
-      }
-
-      isCloudHydrated = true;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-
-      renderStreakWeek();
-      renderProgressTab();
-      renderClassoreLeaderboard();
-      renderUserProfile();
-      renderSubjectsBar();
-
-      initUserLiveListener(uid);
-    } catch (err) {
-      console.error("Cloud hydration error:", err);
-      isCloudHydrated = true;
-    }
-  }
-
-  function initUserLiveListener(uid) {
-    const db = firebase.firestore();
-    db.collection("users").doc(uid).onSnapshot(doc => {
-      if (doc.exists) {
-        const remote = doc.data();
-
-        const remoteWeekly = remote.weeklyPoints ?? remote.points ?? 0;
-        const remoteDaily = remote.dailyPoints ?? 0;
-        const remoteAllTime = remote.allTimePoints ?? remote.points ?? 0;
-        const remoteTotalSec = remote.totalSeconds ?? ((remote.totalStudyTime || 0) * 60) ?? 0;
-        const remoteWeekSec = Math.round((remote.weeklyHours || 0) * 3600) || remoteTotalSec;
-
-        state.stats.weeklyPoints = Math.max(state.stats.weeklyPoints, remoteWeekly);
-        state.stats.dailyPoints = Math.max(state.stats.dailyPoints, remoteDaily);
-        state.stats.allTimePoints = Math.max(state.stats.allTimePoints, remoteAllTime);
-        state.stats.weekSeconds = Math.max(state.stats.weekSeconds, remoteWeekSec);
-        state.stats.totalSeconds = Math.max(state.stats.totalSeconds, remoteTotalSec);
-
-        if (remote.streak !== undefined) state.streak.count = Math.max(state.streak.count, remote.streak);
-        if (remote.displayName) state.user.displayName = remote.displayName;
-        if (remote.avatar) state.user.avatar = remote.avatar;
-        if (remote.bio) state.user.bio = remote.bio;
-        if (remote.isPremium || isSuperAdmin(state.user.email)) state.user.isPremium = true;
-
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        renderStreakWeek();
-        renderProgressTab();
-        renderClassoreLeaderboard();
-        renderUserProfile();
-      }
-    });
-  }
-
-  function initFirestoreRealtimeLeaderboard() {
-    if (!window.firebase || !firebase.apps.length) {
-      renderClassoreLeaderboard();
-      return;
-    }
-    const db = firebase.firestore();
-
-    db.collection("users").limit(50).onSnapshot(snap => {
-      cachedLeaderboardUsers = [];
-      snap.forEach(doc => {
-        const data = doc.data();
-        const userEmail = data.email || "";
-        cachedLeaderboardUsers.push({
-          uid: doc.id,
-          email: userEmail,
-          displayName: data.displayName || "Scholar",
-          avatar: data.avatar || null,
-          bio: data.bio || "Scholar",
-          points: data.points ?? data.weeklyPoints ?? 0,
-          weeklyPoints: data.weeklyPoints ?? data.points ?? 0,
-          dailyPoints: data.dailyPoints ?? data.points ?? 0,
-          allTimePoints: data.allTimePoints ?? data.points ?? 0,
-          weeklyHours: data.weeklyHours ?? ((data.totalStudyTime || 0) / 60) ?? 0,
-          streak: data.streak || 0,
-          isPremium: isSuperAdmin(userEmail) || data.isPremium === true
-        });
-      });
-      renderClassoreLeaderboard();
-    }, err => console.warn(err));
-  }
-
-  function triggerGoogleSignIn() {
-    if (window.signInWithGoogle) {
-      window.signInWithGoogle().catch(() => {
-        showModal("Sign-In Notice", "Sign-in popup was dismissed. Please check your credentials.", [
-          { label: "Close", action: closeModal }
-        ]);
-      });
-    }
-  }
-
-  function initAuth() {
-    if (!window.firebase || !firebase.apps.length) return;
-
-    firebase.auth().onAuthStateChanged(async user => {
-      if (user) {
-        state.user.uid = user.uid;
-        state.user.email = (user.email || "").toLowerCase().trim();
-        state.user.displayName = user.displayName || state.user.displayName;
-        if (!state.user.avatar && user.photoURL) {
-          state.user.avatar = user.photoURL;
-        }
-
-        if (isSuperAdmin(state.user.email)) {
-          state.user.isAdmin = true;
-          state.user.isPremium = true;
-          console.log("[MORROW] Super Admin verified: gethminahalangoda@gmail.com");
-        }
-
-        const btnLogin = $("#btnGoogleLogin");
-        const btnLogout = $("#btnSignOut");
-        if (btnLogin) btnLogin.style.display = "none";
-        if (btnLogout) btnLogout.style.display = "inline-flex";
-
-        renderUserProfile();
-        initFirestoreRealtimeLeaderboard();
-        initRealtimeNotificationsListener();
-        initClassoreLeagues();
-        initSystemNotifications();
-
-        await hydrateUserFromCloud(user.uid);
-      } else {
-        state.user.uid = null;
-        state.user.email = null;
-        state.user.isAdmin = false;
-        state.user.isPremium = false;
-        isCloudHydrated = false;
-        const btnLogin = $("#btnGoogleLogin");
-        const btnLogout = $("#btnSignOut");
-        if (btnLogin) btnLogin.style.display = "inline-flex";
-        if (btnLogout) btnLogout.style.display = "none";
-      }
-    });
-
-    const btnLogin = $("#btnGoogleLogin");
-    if (btnLogin) btnLogin.addEventListener("click", triggerGoogleSignIn);
-    const btnLogout = $("#btnSignOut");
-    if (btnLogout) {
-      btnLogout.addEventListener("click", async () => {
-        if (window.signOutUser) {
-          await window.signOutUser();
-        } else {
-          await firebase.auth().signOut();
-        }
-        location.reload();
-      });
-    }
-  }
-
-  // -------------------------------------------------------------
-  // 14. PREFERENCES & LOCAL AVATAR DRAG/DROP
-  // -------------------------------------------------------------
-  function initPreferences() {
-    renderUserProfile();
-
-    const slider = $("#dailyGoalSlider");
-    if (slider) {
-      slider.value = state.settings.dailyGoalHours;
-      const lbl = $("#dailyGoalLabel");
-      if (lbl) lbl.textContent = `${state.settings.dailyGoalHours.toFixed(1)}h`;
-      slider.addEventListener("input", e => {
-        state.settings.dailyGoalHours = parseFloat(e.target.value);
-        if (lbl) lbl.textContent = `${state.settings.dailyGoalHours.toFixed(1)}h`;
-      });
-    }
-
-    const themeSw = $("#themeSwitch");
-    if (themeSw) {
-      themeSw.addEventListener("click", () => {
-        const next = state.settings.theme === "dark" ? "light" : "dark";
-        state.settings.theme = next;
-        applyTheme(next);
-        applyAccentColor(state.subjects[0]?.color || "#ca3838");
-        saveLocalState();
-      });
-    }
-
-    const savePrefBtn = $("#btnSavePreferences");
-    if (savePrefBtn) {
-      savePrefBtn.addEventListener("click", () => {
-        const name = $("#prefDisplayName").value.trim();
-        const bio = $("#prefBio").value.trim();
-        if (name) state.user.displayName = name;
-        state.user.bio = bio;
-        saveLocalState();
-        renderUserProfile();
-        renderClassoreLeaderboard();
-        showModal("Preferences Saved", "Your settings and scholar profile have been updated.", [{ label: "OK", action: closeModal }]);
-      });
-    }
-
-    const syncCloudBtn = $("#btnSyncCloud");
-    if (syncCloudBtn) {
-      syncCloudBtn.addEventListener("click", () => {
-        saveLocalState();
-        showModal("Synchronized", "Your stats and points are synced across devices.", [{ label: "OK", action: closeModal }]);
-      });
-    }
-
-    const dropZone = $("#avatarDropZone");
-    const fileInput = $("#avatarFileInput");
-
-    if (dropZone && fileInput) {
-      dropZone.addEventListener("dragover", e => {
-        e.preventDefault();
-        dropZone.classList.add("dragover");
-      });
-      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-      dropZone.addEventListener("drop", e => {
-        e.preventDefault();
-        dropZone.classList.remove("dragover");
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          handleAvatarFile(e.dataTransfer.files[0]);
-        }
-      });
-
-      fileInput.addEventListener("change", e => {
-        if (e.target.files && e.target.files[0]) {
-          handleAvatarFile(e.target.files[0]);
-        }
-      });
-    }
-  }
-
-  function handleAvatarFile(file) {
-    if (!file.type.startsWith("image/")) {
-      showModal("Invalid File", "Please upload an image file (PNG, JPG, WEBP).", [{ label: "OK", action: closeModal }]);
-      return;
-    }
-    if (file.size > 2.5 * 1024 * 1024) {
-      showModal("File Too Large", "Please choose an image under 2.5MB.", [{ label: "OK", action: closeModal }]);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = evt => {
-      state.user.avatar = evt.target.result;
-      renderUserProfile();
-      saveLocalState();
-      renderClassoreLeaderboard();
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function renderUserProfile() {
-    const isVerified = isUserPremium(state.user);
-    const sideName = $("#sideUserName");
-    if (sideName) {
-      sideName.innerHTML = `<span>${state.user.displayName}</span> ${getVerifiedBadgeHtml(isVerified)}`;
-    }
-
-    const prefName = $("#prefDisplayName");
-    if (prefName) prefName.value = state.user.displayName;
-    const prefBio = $("#prefBio");
-    if (prefBio) prefBio.value = state.user.bio;
-
-    renderAvatar($("#sideAvatarContainer"), state.user, "40px");
-    renderAvatar($("#avatarPreviewBox"), state.user, "60px");
-  }
-
-  // -------------------------------------------------------------
-  // 15. CUSTOM IN-APP MODAL
-  // -------------------------------------------------------------
-  const modalEl = $("#customModal");
-  const modalTitle = $("#modalTitle");
-  const modalDesc = $("#modalDesc");
-  const modalButtons = $("#modalButtons");
-
-  function showModal(title, descOrHtml, buttons = [], isHtml = false) {
-    if (!modalEl) return;
-    modalTitle.textContent = title;
-    if (isHtml) {
-      modalDesc.innerHTML = descOrHtml;
-    } else {
-      modalDesc.textContent = descOrHtml;
-    }
-    modalButtons.innerHTML = "";
-
-    buttons.forEach(b => {
-      const btn = document.createElement("button");
-      btn.className = b.primary ? "btn" : "btn ghost";
-      btn.textContent = b.label;
-      btn.addEventListener("click", b.action);
-      modalButtons.appendChild(btn);
-    });
-
-    modalEl.classList.add("active");
-    lucide.createIcons();
-  }
-
-  function closeModal() {
-    if (modalEl) modalEl.classList.remove("active");
-  }
-
-  // -------------------------------------------------------------
-  // 16. TABS NAVIGATION & LIQUID GLASS INDICATORS
-  // -------------------------------------------------------------
-  const navIndicator = $("#navIndicator");
-  const tabs = $$(".tab");
-  const panels = $$(".panel");
-
-  function placeIndicator(ind, target, animate = true) {
-    if (!ind || !target || !target.offsetWidth) return;
-    if (!animate) ind.style.transition = "none";
-    ind.style.width = target.offsetWidth + "px";
-    ind.style.height = target.offsetHeight + "px";
-    ind.style.transform = `translate(${target.offsetLeft}px, ${target.offsetTop}px)`;
-    if (!animate) { void ind.offsetWidth; ind.style.transition = ""; }
-    ind.classList.add("ready");
-  }
-
-  function switchTab(name) {
-    tabs.forEach(t => {
-      const on = t.dataset.tab === name;
-      t.setAttribute("aria-selected", String(on));
-      t.tabIndex = on ? 0 : -1;
-    });
-    panels.forEach(p => p.hidden = p.id !== `panel-${name}`);
-    $("#pageTitle").textContent = name.charAt(0).toUpperCase() + name.slice(1);
-    placeIndicator(navIndicator, $(`.tab[aria-selected="true"]`));
-
-    if (name === "progress") renderProgressTab();
-    if (name === "ranking") {
-      renderClassoreLeaderboard();
-      initClassoreLeagues();
-    }
-    if (name === "timer") placeIndicator($("#segIndicator"), $('#seg [aria-pressed="true"]'), false);
-  }
-
-  tabs.forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
-
+  /* ============================================================
+     MICRO-INTERACTIONS
+     ============================================================ */
+
+  // Ripple (delegated, so it also works on elements created later)
   document.addEventListener("pointerdown", e => {
+    if (reduce) return;
     const el = e.target.closest('[data-fx~="ripple"]');
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -2015,33 +39,1293 @@
     dot.addEventListener("animationend", () => dot.remove());
   });
 
-  window.addEventListener("focus", () => { if (!timerRunning) setPresence("online"); });
-  window.addEventListener("blur", () => { if (!timerRunning) setPresence("offline"); });
+  // Magnetic (mouse only, so touch scrolling never moves the button)
+  $$('[data-fx~="magnetic"]').forEach(el => {
+    if (reduce) return;
+    const strength = 0.3, max = 14;
+    const clamp = v => Math.max(-max, Math.min(max, v));
+    el.addEventListener("pointermove", e => {
+      if (e.pointerType !== "mouse") return;
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--tx", clamp((e.clientX - (r.left + r.width / 2)) * strength) + "px");
+      el.style.setProperty("--ty", clamp((e.clientY - (r.top + r.height / 2)) * strength) + "px");
+    });
+    el.addEventListener("pointerleave", () => {
+      el.style.setProperty("--tx", "0px");
+      el.style.setProperty("--ty", "0px");
+    });
+  });
 
-  // -------------------------------------------------------------
-  // INITIALIZATION
-  // -------------------------------------------------------------
-  injectDynamicStyles();
-  checkDayRoll();
-  applyTheme(state.settings.theme);
-  applyAccentColor(state.subjects[0]?.color || "#ca3838");
-  initTimer();
-  initWhiteNoiseWidget();
-  renderStreakWeek();
+  // Tilt (subtle)
+  $$('[data-fx~="tilt"]').forEach(el => {
+    if (reduce) return;
+    el.addEventListener("pointermove", e => {
+      if (e.pointerType !== "mouse") return;
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--ry", (((e.clientX - r.left) / r.width - 0.5) * 8).toFixed(2) + "deg");
+      el.style.setProperty("--rx", ((0.5 - (e.clientY - r.top) / r.height) * 8).toFixed(2) + "deg");
+    });
+    el.addEventListener("pointerleave", () => {
+      el.style.setProperty("--rx", "0deg");
+      el.style.setProperty("--ry", "0deg");
+    });
+  });
+
+  // Cursor spotlight
+  $$('[data-fx~="spot"]').forEach(el => {
+    el.addEventListener("pointermove", e => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--mx", (e.clientX - r.left) + "px");
+      el.style.setProperty("--my", (e.clientY - r.top) + "px");
+    });
+  });
+
+  // Particle burst
+  function burst(x, y, count = 12, spread = 1) {
+    if (reduce) return;
+    const color = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#3b4cff";
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("span");
+      p.className = "fx-particle";
+      p.style.background = color;
+      document.body.appendChild(p);
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+      const dist = (30 + Math.random() * 26) * spread;
+      const anim = p.animate([
+        { transform: `translate(${x - 4}px, ${y - 4}px) scale(1)`, opacity: 1 },
+        { transform: `translate(${x - 4 + Math.cos(angle) * dist}px, ${y - 4 + Math.sin(angle) * dist}px) scale(0)`, opacity: 0 }
+      ], { duration: 560 + Math.random() * 220, easing: "cubic-bezier(.2,.8,.3,1)" });
+      anim.onfinish = () => p.remove();
+    }
+  }
+
+  function shake(el) {
+    if (reduce) return;
+    el.animate(
+      [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(6px)" }, { transform: "translateX(0)" }],
+      { duration: 240, easing: "ease-in-out" }
+    );
+  }
+
+  // Sliding indicator used by the sidebar and the mode switch
+  function place(indicator, target, animate = true) {
+    if (!indicator || !target || !target.offsetWidth) return;
+    if (!animate) indicator.style.transition = "none";
+    indicator.style.width = target.offsetWidth + "px";
+    indicator.style.height = target.offsetHeight + "px";
+    indicator.style.transform = `translate(${target.offsetLeft}px, ${target.offsetTop}px)`;
+    if (!animate) { void indicator.offsetWidth; indicator.style.transition = ""; }
+    indicator.classList.add("ready");
+  }
+
+  /* ============================================================
+     COLOR HELPERS
+     ============================================================ */
+  const hexToRgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const luminance = c => {
+    const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  };
+  const onColor = c => luminance(c) > 0.2 ? "#14171f" : "#ffffff";
+  const hexOk = h => typeof h === "string" && /^#[0-9a-f]{6}$/i.test(h);
+
+  /* ============================================================
+     TASKS (ticked tasks clear themselves quietly)
+     ============================================================ */
+  const sample = []; const _unused = [
+    { id: 1, text: "Read chapter 4", done: false },
+    { id: 2, text: "Finish the problem set", done: false },
+    { id: 3, text: "Review yesterday's notes", done: false }
+  ];
+  let tasks = store.get("focus-tasks", null);
+  if (!Array.isArray(tasks)) tasks = sample;
+  tasks = tasks
+    .filter(t => t && typeof t.text === "string")
+    .map(t => ({ id: Number(t.id) || 0, text: t.text, done: !!t.done }));
+  let nextId = tasks.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+
+  const list = $("#taskList"), empty = $("#taskEmpty"), meta = $("#taskMeta"), now = $("#now");
+  const saveTasks = () => { store.set("focus-tasks", tasks); H.onTasks(tasks); };
+
+  function clearDone() {
+    if (!tasks.some(t => t.done)) return;
+    tasks = tasks.filter(t => !t.done);
+    saveTasks();
+    renderTasks();
+  }
+
+  function renderNow() {
+    const t = tasks.find(x => !x.done);
+    now.textContent = "";
+    if (t) {
+      now.append("Working on ");
+      const s = document.createElement("strong");
+      s.textContent = t.text;
+      now.appendChild(s);
+    } else {
+      now.textContent = "No task selected. Add one in Tasks.";
+    }
+  }
+
+  function renderTasks(popId) {
+    list.textContent = "";
+    tasks.forEach(t => {
+      const li = document.createElement("li");
+      li.className = "task" + (t.done ? " done" : "");
+      li.dataset.id = t.id;
+
+      const check = document.createElement("button");
+      check.type = "button";
+      check.className = "check" + (t.id === popId && t.done ? " pop" : "");
+      check.setAttribute("role", "checkbox");
+      check.setAttribute("aria-checked", String(t.done));
+      check.setAttribute("aria-label", (t.done ? "Mark not done: " : "Mark done: ") + t.text);
+      check.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+      const text = document.createElement("span");
+      text.className = "task-text";
+      text.textContent = t.text;
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "del";
+      del.setAttribute("aria-label", "Delete task: " + t.text);
+      del.innerHTML = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+      li.append(check, text, del);
+      list.appendChild(li);
+    });
+    const done = tasks.filter(t => t.done).length;
+    empty.hidden = tasks.length > 0;
+    meta.textContent = tasks.length ? `${done} of ${tasks.length} done` : "";
+    renderNow();
+  }
+
+  list.addEventListener("click", e => {
+    const li = e.target.closest(".task");
+    if (!li) return;
+    const id = Number(li.dataset.id);
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+
+    if (e.target.closest(".check")) {
+      task.done = !task.done;
+      if (task.done) {
+        const r = e.target.closest(".check").getBoundingClientRect();
+        burst(r.left + r.width / 2, r.top + r.height / 2);
+      }
+      saveTasks();
+      renderTasks(id);
+    } else if (e.target.closest(".subj-del")) {
+      li.classList.add("leaving");
+      setTimeout(() => {
+        tasks = tasks.filter(t => t.id !== id);
+        saveTasks();
+        renderTasks();
+      }, reduce ? 0 : 180);
+    }
+  });
+
+  $("#taskForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const input = $("#taskInput");
+    const value = input.value.trim();
+    if (!value) { shake(input); input.focus(); return; }
+    tasks.push({ id: nextId++, text: value, done: false });
+    input.value = "";
+    saveTasks();
+    renderTasks();
+    input.focus();
+  });
+
+  // Ticked tasks go when the person leaves the page, switches browser tab, or leaves the Tasks tab
+  document.addEventListener("visibilitychange", () => { if (document.hidden) clearDone(); });
+  window.addEventListener("pagehide", clearDone);
+
+  /* ============================================================
+     TABS
+     ============================================================ */
+  const tabs = $$(".tab");
+  const titles = { timer: "Timer", tasks: "Tasks", subjects: "Subjects", progress: "Progress", papers: "Paper progress", ranking: "Ranking", preferences: "Preferences" };
+  const navIndicator = $("#navIndicator");
+  const segIndicator = $("#segIndicator");
+  let currentTab = "timer";
+
+  function showTab(name) {
+    if (currentTab === "tasks" && name !== "tasks") clearDone();
+    currentTab = name;
+    document.documentElement.dataset.tab = name;
+    tabs.forEach(t => {
+      const on = t.dataset.tab === name;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+    });
+    $$(".panel").forEach(p => { p.hidden = p.id !== "panel-" + name; });
+    $("#pageTitle").textContent = titles[name];
+    place(navIndicator, $('.tab[aria-selected="true"]'));
+    if (name === "timer") place(segIndicator, $('#seg [aria-pressed="true"]'), false);
+    H.onTab(name);
+    if (H.ready) { H.markSeen(name); if (name === "papers") H.drawPapers(true); }
+  }
+
+  tabs.forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
+  $(".nav").addEventListener("keydown", e => {
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    let n = null;
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") n = (i + 1) % tabs.length;
+    else if (e.key === "ArrowUp" || e.key === "ArrowLeft") n = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") n = 0;
+    else if (e.key === "End") n = tabs.length - 1;
+    if (n === null) return;
+    e.preventDefault();
+    tabs[n].focus();
+    showTab(tabs[n].dataset.tab);
+  });
+
+  /* ============================================================
+     PREFERENCES
+     ============================================================ */
+  const defaults = { timer: 30, focus: 25, short: 5, long: 15, sound: true, auto: false, dark: null, nav: "left" };
+  const saved = store.get("focus-prefs", {});
+  const prefs = Object.assign({}, defaults, saved && typeof saved === "object" ? saved : {});
+  const limits = { timer: [1, 99], focus: [1, 90], short: [1, 30], long: [1, 60] };
+  Object.keys(limits).forEach(k => {
+    const n = Math.round(Number(prefs[k]));
+    prefs[k] = Number.isFinite(n) ? Math.min(limits[k][1], Math.max(limits[k][0], n)) : defaults[k];
+  });
+  const savePrefs = () => { store.set("focus-prefs", prefs); H.onPrefs(prefs); };
+  const isDark = () => prefs.dark === null ? darkQuery.matches : !!prefs.dark;
+
+  function applyTheme() {
+    document.documentElement.dataset.theme = isDark() ? "dark" : "light";
+  }
+
+  function syncPrefControls() {
+    $$(".stepper").forEach(s => { $("output", s).textContent = prefs[s.dataset.key]; });
+    $$(".switch").forEach(sw => {
+      const key = sw.dataset.pref;
+      sw.setAttribute("aria-checked", String(key === "dark" ? isDark() : !!prefs[key]));
+    });
+  }
+
+  $$(".stepper").forEach(s => {
+    s.addEventListener("click", e => {
+      const b = e.target.closest("[data-step]");
+      if (!b) return;
+      const key = s.dataset.key;
+      prefs[key] = Math.min(+s.dataset.max, Math.max(+s.dataset.min, prefs[key] + +b.dataset.step));
+      $("output", s).textContent = prefs[key];
+      savePrefs();
+      timer.afterPrefChange(key);
+    });
+  });
+
+  $$(".switch").forEach(sw => {
+    sw.addEventListener("click", () => {
+      const key = sw.dataset.pref;
+      const next = sw.getAttribute("aria-checked") !== "true";
+      if (key === "dark") { prefs.dark = next; applyTheme(); applyAccent(); }
+      else prefs[key] = next;
+      sw.setAttribute("aria-checked", String(next));
+      savePrefs();
+    });
+  });
+
+  /* ============================================================
+     SUBJECTS (the active subject sets the color of the whole site)
+     ============================================================ */
+  const navs = ["top", "left", "right", "bottom"];
+  function applyNav() {
+    if (!navs.includes(prefs.nav)) prefs.nav = "left";
+    document.documentElement.dataset.nav = prefs.nav;
+    $$("#navOpts [data-nav]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.nav === prefs.nav)));
+    requestAnimationFrame(() => place(navIndicator, $('.tab[aria-selected="true"]'), false));
+  }
+
+  const PALETTE = [
+    ["Lavender", "#b9aee8"], ["Periwinkle", "#a9b8ee"], ["Sky", "#9fc9e6"], ["Mint", "#a4d8c0"],
+    ["Sage", "#b7d3a0"], ["Butter", "#ecd89a"], ["Peach", "#f0bf9f"], ["Rose", "#eeb2c0"]
+  ];
+  const baseSubjects = [
+    { id: "mathematics", name: "Combined Mathematics", color: "#b9aee8", locked: false },
+    { id: "physics", name: "Physics", color: "#9fc9e6", locked: false },
+    { id: "chemistry", name: "Chemistry", color: "#a4d8c0", locked: false }
+  ];
+  const OLD = { mathematics: ["Mathematics", "#8b5cf6"], physics: ["Physics", "#3b4cff"], chemistry: ["Chemistry", "#1fa971"] };
+  const migrate = list => list.map(s => {   // upgrade the earlier default subjects to the new pale ones
+    const o = OLD[s.id];
+    if (o && s.name === o[0] && String(s.color).toLowerCase() === o[1]) { const b = baseSubjects.find(x => x.id === s.id); return Object.assign({}, s, { name: b.name, color: b.color }); }
+    return s;
+  });
+  let subjects = store.get("focus-subjects", null);
+  if (Array.isArray(subjects)) {
+    subjects = subjects
+      .filter(s => s && typeof s.id === "string" && typeof s.name === "string" && s.name.trim() && hexOk(s.color))
+      .map(s => ({ id: s.id, name: s.name.trim().slice(0, 24), color: s.color.toLowerCase(), locked: false }));
+  } else {
+    subjects = baseSubjects.map(s => Object.assign({}, s));
+  }
+  subjects = migrate(subjects);
+  if (!subjects.length) subjects = baseSubjects.map(s => Object.assign({}, s));
+  let activeId = store.get("focus-subject", subjects[0].id);
+  if (!subjects.some(s => s.id === activeId)) activeId = subjects[0].id;
+
+  const subjectBox = $("#subjects");
+  const subjectForm = $("#subjectForm");
+  const nameInput = $("#subjectName");
+  const swatchBox = $("#swatches");
+  const activeSubject = () => subjects.find(s => s.id === activeId) || subjects[0];
+  const subjectList = () => subjects.map(s => ({ id: s.id, name: s.name, color: s.color }));
+  const saveSubjects = () => { store.set("focus-subjects", subjectList()); H.onSubjects(subjectList()); };
+
+  function applyAccent() {
+    let c = hexToRgb(activeSubject().color);
+    c = isDark() ? mix(c, [255, 255, 255], 0.12) : mix(c, [0, 0, 0], 0.12);
+    const c2 = mix(c, [255, 255, 255], 0.4);
+    const root = document.documentElement.style;
+    root.setProperty("--accent", `rgb(${c.join(",")})`);
+    root.setProperty("--accent-2", `rgb(${c2.join(",")})`);
+    root.setProperty("--on-accent", onColor(c));
+    root.setProperty("--accent-soft", `rgba(${c.join(",")},${isDark() ? 0.18 : 0.11})`);
+    root.setProperty("--accent-mid", `rgba(${c.join(",")},.3)`);
+  }
+
+  function updateSelected() {
+    $$(".chip[data-id]", subjectBox).forEach(chip => {
+      const on = chip.dataset.id === activeId;
+      chip.classList.toggle("on", on);
+      $(".chip-main", chip).setAttribute("aria-pressed", String(on));
+    });
+  }
+
+  function renderSubjects() {
+    subjectBox.textContent = "";
+    subjects.forEach(s => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.dataset.id = s.id;
+      chip.style.setProperty("--c", s.color);
+      chip.style.setProperty("--oc", onColor(hexToRgb(s.color)));
+
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "chip-main";
+      main.dataset.fx = "ripple";
+      const dot = document.createElement("i");
+      dot.className = "chip-dot";
+      main.append(dot, document.createTextNode(s.name));
+      chip.appendChild(main);
+
+      subjectBox.appendChild(chip);
+    });
+
+    const add = document.createElement("span");
+    add.className = "chip add";
+    add.innerHTML = '<button type="button" class="chip-main" id="manageSubjects" data-fx="ripple">Edit subjects</button>';
+    subjectBox.appendChild(add);
+    updateSelected();
+    if (H.ready) H.afterSubjects();
+  }
+
+  function selectSubject(id) {
+    if (id === activeId) return;
+    if (timer.running || (timer.isFocus() && timer.elapsed() > 0)) return toast("Save or reset the session before switching subject");
+    activeId = id;
+    store.set("focus-subject", activeId);
+    applyAccent();
+    updateSelected();
+  }
+
+  function deleteSubject(id) {
+    const s = subjects.find(x => x.id === id);
+    if (!s) return;
+    if (subjects.length < 2) return toast("Keep at least one subject");
+    if (timer.running && activeId === id) return toast("Pause the timer before deleting this subject");
+    subjects = subjects.filter(x => x.id !== id);
+    if (activeId === id) { activeId = subjects[0].id; store.set("focus-subject", activeId); applyAccent(); }
+    saveSubjects();
+    renderSubjects();
+    const next = $('.chip[data-id] .chip-main', subjectBox);
+    if (next) next.focus();
+  }
+
+  subjectBox.addEventListener("click", e => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    if (e.target.closest("#manageSubjects")) { showTab("subjects"); return; }
+    const id = chip.dataset.id;
+    if (!id) return;
+    if (e.target.closest(".chip-x")) deleteSubject(id);
+    else if (e.target.closest(".chip-main")) selectSubject(id);
+  });
+
+  // Add-subject form
+  let pickColor = PALETTE[0][1];
+  let customChosen = false;
+  const customInput = document.createElement("input");
+  customInput.type = "color";
+  customInput.value = "#0ea5e9";
+  customInput.setAttribute("aria-label", "Custom color");
+  const customSwatch = document.createElement("label");
+  customSwatch.className = "swatch custom";
+  customSwatch.appendChild(customInput);
+
+  function markSwatches() {
+    $$("button.swatch", swatchBox).forEach(b => b.setAttribute("aria-pressed", String(!customChosen && b.dataset.hex === pickColor)));
+    customSwatch.classList.toggle("chosen", customChosen);
+    customSwatch.setAttribute("aria-pressed", String(customChosen));
+    if (customChosen) customSwatch.style.setProperty("--c", pickColor);
+  }
+
+  function renderSwatches() {
+    swatchBox.textContent = "";
+    PALETTE.forEach(([label, hex]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "swatch";
+      b.dataset.hex = hex;
+      b.style.setProperty("--c", hex);
+      b.setAttribute("aria-label", label);
+      swatchBox.appendChild(b);
+    });
+    swatchBox.appendChild(customSwatch);
+    markSwatches();
+  }
+
+  swatchBox.addEventListener("click", e => {
+    const b = e.target.closest("button.swatch");
+    if (!b) return;
+    pickColor = b.dataset.hex;
+    customChosen = false;
+    markSwatches();
+  });
+  customInput.addEventListener("input", () => {
+    pickColor = customInput.value.toLowerCase();
+    customChosen = true;
+    markSwatches();
+  });
+
+  function toggleForm(open) {
+    subjectForm.hidden = !open;
+    const b = $("#addSubjectBtn");
+    if (b) b.setAttribute("aria-expanded", String(open));
+    if (open) {
+      const used = subjects.map(s => s.color);
+      const free = PALETTE.find(p => !used.includes(p[1]));
+      pickColor = (free || PALETTE[0])[1];
+      customChosen = false;
+      renderSwatches();
+      nameInput.focus({ preventScroll: true });
+    }
+  }
+
+  subjectForm.addEventListener("submit", e => {
+    e.preventDefault();
+    const name = nameInput.value.trim();
+    const dup = subjects.some(s => s.name.toLowerCase() === name.toLowerCase());
+    if (!name || dup) { shake(nameInput); nameInput.focus(); return; }
+    const s = { id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, color: pickColor, locked: false };
+    subjects.push(s);
+    saveSubjects();
+    nameInput.value = "";
+    toggleForm(false);
+    renderSubjects();
+    applyAccent();
+  });
+  $("#cancelSubject").addEventListener("click", () => { nameInput.value = ""; toggleForm(false); });
+  nameInput.addEventListener("keydown", e => { if (e.key === "Escape") toggleForm(false); });
+
+  /* ============================================================
+     TIMER and POMODORO
+     Uses real timestamps, so it never drifts, even in a background tab.
+     ============================================================ */
+  const NS = "http://www.w3.org/2000/svg";
+  const ringWrap = $("#ringWrap");
+  const ring = $("#ring");
+  const head = $("#head");
+  const C = 2 * Math.PI * 100;
+  ring.style.strokeDasharray = C.toFixed(2);
+
+  // 60 ticks around the dial; they go out as time runs down
+  const ticks = Array.from({ length: 60 }, (_, i) => {
+    const a = (i * Math.PI) / 30;
+    const r1 = 109, r2 = i % 5 === 0 ? 119 : 115;
+    const l = document.createElementNS(NS, "line");
+    l.setAttribute("class", "tick");
+    l.setAttribute("x1", (120 + r1 * Math.sin(a)).toFixed(2));
+    l.setAttribute("y1", (120 - r1 * Math.cos(a)).toFixed(2));
+    l.setAttribute("x2", (120 + r2 * Math.sin(a)).toFixed(2));
+    l.setAttribute("y2", (120 - r2 * Math.cos(a)).toFixed(2));
+    $("#ticks").appendChild(l);
+    return l;
+  });
+
+  const digits = $$("#time .d");
+  const statusEl = $("#status");
+  const startBtn = $("#startBtn");
+  const startLabel = $(".label", startBtn);
+  const skipBtn = $("#skipBtn");
+  const presetsEl = document.createElement("div"); // stopwatch has no length presets
+  const cycleEl = $("#cycle");
+  const pips = $$(".pip", cycleEl);
+  const modeButtons = $$("#seg [data-mode]");
+  const PHASE = { focus: "Focus", short: "Short break", long: "Long break" };
+
+  const timeEl = $("#time");
+  function setTime(str) {
+    if (timeEl.children.length !== str.length) {
+      timeEl.textContent = "";
+      for (const ch of str) { const s = document.createElement("span"); s.className = ch === ":" ? "colon" : "d"; timeEl.appendChild(s); }
+    }
+    timeEl.classList.toggle("long", str.length > 5);
+    Array.from(str).forEach((ch, i) => { timeEl.children[i].textContent = ch; });
+  }
+
+  const timer = {
+    mode: "stopwatch", phase: "focus", cycle: 0,
+    totalMs: 0, remainingMs: 0, endAt: 0, accMs: 0, t0: 0,
+    running: false, paused: false, finished: false,
+    handle: 0, raf: 0, lastStr: "", lastLit: -1,
+
+    elapsed() { if (this.mode === "stopwatch") return Math.floor((this.running ? Date.now() - this.t0 : this.accMs) / 1000); const ms = this.running ? Math.max(0, this.endAt - Date.now()) : this.remainingMs; return Math.round((this.totalMs - ms) / 1000); },
+    isFocus() { return this.mode === "stopwatch" || this.phase === "focus"; },
+    lengthKey() { return this.mode === "stopwatch" ? "" : this.phase; },
+    resetLength() { this.accMs = 0; if (this.mode === "stopwatch") { this.totalMs = 0; this.remainingMs = 0; return; } this.totalMs = prefs[this.lengthKey()] * 60000; this.remainingMs = this.totalMs; },
+
+    setMode(mode) {
+      this.halt();
+      this.mode = mode;
+      this.phase = "focus";
+      this.cycle = 0;
+      this.paused = false;
+      this.finished = false;
+      this.resetLength();
+      modeButtons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+      place(segIndicator, $('#seg [aria-pressed="true"]'));
+      presetsEl.hidden = mode !== "timer";
+      cycleEl.hidden = mode !== "pomodoro";
+      skipBtn.hidden = mode !== "pomodoro";
+      this.refresh();
+    },
+
+    setPhase(phase) {
+      this.halt();
+      this.phase = phase;
+      this.paused = false;
+      this.finished = false;
+      this.resetLength();
+      this.refresh();
+    },
+
+    halt() {
+      clearInterval(this.handle);
+      cancelAnimationFrame(this.raf);
+      this.handle = 0;
+      this.raf = 0;
+      if (this.running) { if (this.mode === "stopwatch") this.accMs = Date.now() - this.t0; else this.remainingMs = Math.max(0, this.endAt - Date.now()); }
+      if (this.running && this.isFocus()) H.studying(false);
+      this.running = false;
+      ringWrap.classList.remove("running");
+    },
+
+    start() {
+      if (this.running || !H.canStart()) return;
+      if (this.mode === "stopwatch") this.t0 = Date.now() - this.accMs;
+      else { if (this.remainingMs <= 0) this.resetLength(); this.endAt = Date.now() + this.remainingMs; }
+      this.running = true;
+      this.paused = false;
+      this.finished = false;
+      ringWrap.classList.add("running");
+      if (this.isFocus()) H.studying(true);
+      this.handle = setInterval(() => this.tick(), 250);
+      this.loop();
+      this.refresh();
+    },
+
+    pause() {
+      this.halt();
+      this.paused = true;
+      this.refresh();
+    },
+
+    reset() {
+      this.halt();
+      this.paused = false;
+      this.finished = false;
+      this.resetLength();
+      this.refresh();
+    },
+
+    tick() {
+      if (this.mode === "pomodoro" && this.endAt - Date.now() <= 0) this.finish();
+    },
+
+    loop() {
+      this.paint();
+      if (this.running) this.raf = requestAnimationFrame(() => this.loop());
+    },
+
+    finish() {
+      const counts = this.isFocus(), secs = Math.round(this.totalMs / 1000);
+      this.halt();
+      if (counts) H.session(secs, activeSubject().name);
+      this.remainingMs = 0;
+      this.paint();
+      celebrate();
+      if (prefs.sound) beep();
+      if (this.mode === "pomodoro") {
+        this.advance(true);
+        if (prefs.auto) this.start();
+        else { this.finished = true; this.refresh(); }
+      } else {
+        this.finished = true;
+        this.refresh();
+      }
+    },
+
+    // Move to the next pomodoro phase. Skipping a focus session does not count it.
+    advance(count) {
+      let next = "focus";
+      if (this.phase === "focus") {
+        if (count) this.cycle += 1;
+        next = count && this.cycle % 4 === 0 ? "long" : "short";
+      }
+      this.setPhase(next);
+    },
+
+    afterPrefChange(key) {
+      if (key === this.lengthKey() && !this.running && !this.paused) {
+        this.resetLength();
+        this.refresh();
+      }
+      syncPresets();
+    },
+
+    statusText() {
+      const pomodoro = this.mode === "pomodoro";
+      if (this.running) return pomodoro ? PHASE[this.phase] : "In progress";
+      if (this.paused) return "Paused";
+      if (this.finished) return pomodoro ? "Up next: " + PHASE[this.phase] : "Finished";
+      return pomodoro ? PHASE[this.phase] : "Ready";
+    },
+
+    refresh() {
+      statusEl.textContent = this.statusText();
+      startLabel.textContent = this.running ? "Pause" : this.paused ? "Resume" : "Start";
+      if (this.mode === "pomodoro") {
+        const done = this.phase === "long" ? 4 : this.cycle % 4;
+        pips.forEach((p, i) => {
+          p.classList.toggle("on", i < done);
+          p.classList.toggle("cur", this.phase === "focus" && i === done);
+        });
+        $("#cycleLabel").textContent = this.phase === "focus" ? `Session ${done + 1} of 4` : PHASE[this.phase];
+      }
+      syncPresets();
+      this.lastStr = "";
+      this.paint();
+      this.setTitle();
+    },
+
+    setTitle() {
+      const t = this.lastStr;
+      document.title = this.running && t ? t + " · Morrow" : "Morrow";
+    },
+
+    paint() {
+      let disp, f;
+      if (this.mode === "stopwatch") {
+        const ms = this.running ? Date.now() - this.t0 : this.accMs, s = Math.floor(ms / 1000), p = n => String(n).padStart(2, "0");
+        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+        f = (ms % 60000) / 60000;            // the ring fills once every minute
+        disp = (h ? h + ":" : "") + p(m) + ":" + p(s % 60);
+      } else {
+        const ms = this.running ? Math.max(0, this.endAt - Date.now()) : this.remainingMs, sec = Math.ceil(ms / 1000);
+        f = this.totalMs ? Math.min(1, ms / this.totalMs) : 0;
+        disp = String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0");
+      }
+      ring.style.strokeDashoffset = (C * (1 - f)).toFixed(2);
+      head.style.transform = `rotate(${(360 * f).toFixed(2)}deg)`;
+      const lit = Math.ceil(f * 60);
+      if (lit !== this.lastLit) { ticks.forEach((t, i) => t.classList.toggle("on", i < lit)); this.lastLit = lit; }
+      if (disp !== this.lastStr) { setTime(disp); this.lastStr = disp; this.setTitle(); }
+    }
+  };
+
+  function syncPresets() {
+    $$(".preset", presetsEl).forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.min === prefs.timer)));
+  }
+
+  function celebrate() {
+    ringWrap.classList.remove("flash");
+    void ringWrap.offsetWidth;
+    ringWrap.classList.add("flash");
+    if ($("#panel-timer").hidden) return;
+    const r = ringWrap.getBoundingClientRect();
+    burst(r.left + r.width / 2, r.top + r.height / 2, 18, 3);
+  }
+  ringWrap.addEventListener("animationend", e => { if (e.animationName === "flash") ringWrap.classList.remove("flash"); });
+
+  function beep() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 660;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.65);
+      osc.onended = () => ctx.close();
+    } catch (e) { /* audio unavailable */ }
+  }
+
+  startBtn.addEventListener("click", () => { if (timer.running) timer.pause(); else H.beforeStart(() => timer.start()); });
+  $("#saveBtn").addEventListener("click", () => {
+    if (!timer.isFocus()) return toast("Breaks are not saved");
+    const sec = timer.elapsed();
+    if (sec < 1) return toast("Start the timer first");
+    H.beforeStart(() => { H.session(timer.elapsed(), activeSubject().name); timer.reset(); });
+  });
+  $("#resetBtn").addEventListener("click", () => timer.reset());
+  skipBtn.addEventListener("click", () => timer.advance(false));
+  modeButtons.forEach(b => b.addEventListener("click", () => { if (b.dataset.mode !== timer.mode) timer.setMode(b.dataset.mode); }));
+
+  presetsEl.addEventListener("click", e => {
+    const b = e.target.closest(".preset");
+    if (!b) return;
+    prefs.timer = +b.dataset.min;
+    savePrefs();
+    syncPrefControls();
+    timer.reset();
+  });
+
+  /* ============================================================
+     INIT
+     ============================================================ */
+  clearDone();            // anything ticked last time is already gone
+  applyTheme();
+  applyNav();
+  applyAccent();
+  syncPrefControls();
+  renderSubjects();
+  renderSwatches();
+  timer.setMode("stopwatch");
   renderTasks();
-  initClassoreLeagues();
-  initPreferences();
-  initAuth();
-  switchTab("timer");
-  renderWave();
+  showTab("timer");
 
   const relayout = () => {
-    placeIndicator(navIndicator, $(`.tab[aria-selected="true"]`), false);
-    if (!$("#panel-timer").hidden) placeIndicator($("#segIndicator"), $('#seg [aria-pressed="true"]'), false);
+    place(navIndicator, $('.tab[aria-selected="true"]'), false);
+    if (!$("#panel-timer").hidden) place(segIndicator, $('#seg [aria-pressed="true"]'), false);
   };
   window.addEventListener("resize", relayout);
   window.addEventListener("load", relayout);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+  darkQuery.addEventListener("change", () => { syncPrefControls(); applyTheme(); applyAccent(); });
+
+
+  /* ============================================================
+     WAVE around the dial (like a music player while it plays)
+     ============================================================ */
+  const cv = $("#wave"), cx = cv.getContext("2d");
+  let amp = 0, col = "#3b4cff", fr = 0;
+  (function wave(t) {
+    if (cv.offsetParent) {
+      if (fr++ % 15 === 0) col = getComputedStyle(ringWrap).getPropertyValue("--accent").trim() || col;
+      amp += ((ringWrap.classList.contains("running") && !reduce ? 1 : 0) - amp) * 0.06;
+      const W = cv.width, c = W / 2, n = 84, r = 332;
+      cx.clearRect(0, 0, W, W); cx.strokeStyle = col; cx.lineWidth = 7; cx.lineCap = "round";
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, h = 3 + amp * (10 + 48 * Math.abs(Math.sin(t / 360 + i * 0.55) * Math.cos(t / 900 + i * 0.21)));
+        cx.globalAlpha = 0.25 + 0.6 * amp;
+        cx.beginPath(); cx.moveTo(c + Math.cos(a) * r, c + Math.sin(a) * r); cx.lineTo(c + Math.cos(a) * (r + h), c + Math.sin(a) * (r + h)); cx.stroke();
+      }
+    }
+    requestAnimationFrame(wave);
+  })(0);
+
+  $$("#navOpts [data-nav]").forEach(b => b.addEventListener("click", () => { prefs.nav = b.dataset.nav; savePrefs(); applyNav(); }));
+
+  /* ============================================================
+     SUBJECTS TAB: add, rename, recolor, remove
+     ============================================================ */
+  const escH = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const subjList = $("#subjList");
+  let palOpen = null, listLock = false;
+
+  function renderSubjectList() {
+    subjList.textContent = "";
+    subjects.forEach((s, i) => {
+      const li = document.createElement("li");
+      li.className = "card subj-row"; li.dataset.id = s.id; li.style.setProperty("--c", s.color); li.style.animationDelay = i * 40 + "ms";
+      li.innerHTML = '<button type="button" class="sw" aria-label="Change color of ' + escH(s.name) + '" aria-expanded="' + (palOpen === s.id) + '"></button>' +
+        '<input class="field" type="text" maxlength="24" aria-label="Subject name"><button type="button" class="btn ghost small subj-del" data-fx="ripple">Remove</button>';
+      $("input", li).value = s.name;
+      const pal = document.createElement("div");
+      pal.className = "pal"; pal.hidden = palOpen !== s.id;
+      PALETTE.forEach(([label, hex]) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "swatch"; b.dataset.hex = hex; b.style.setProperty("--c", hex);
+        b.setAttribute("aria-label", label); b.setAttribute("aria-pressed", String(hex === s.color));
+        pal.appendChild(b);
+      });
+      const cl = document.createElement("label"), ci = document.createElement("input");
+      cl.className = "swatch custom"; ci.type = "color"; ci.value = s.color; ci.setAttribute("aria-label", "Custom color");
+      cl.appendChild(ci); pal.appendChild(cl); li.appendChild(pal); subjList.appendChild(li);
+    });
+  }
+  const rowOf = e => { const li = e.target.closest(".subj-row"); return li ? subjects.find(s => s.id === li.dataset.id) : null; };
+  function setColor(s, hex, live) {
+    s.color = hex; saveSubjects();
+    listLock = !!live; renderSubjects(); listLock = false; applyAccent();
+    if (live) { const li = $('.subj-row[data-id="' + s.id + '"]', subjList); if (li) li.style.setProperty("--c", hex); }
+  }
+  subjList.addEventListener("click", e => {
+    const s = rowOf(e); if (!s) return;
+    if (e.target.closest(".sw")) { palOpen = palOpen === s.id ? null : s.id; renderSubjectList(); return; }
+    const sw = e.target.closest("button.swatch"); if (sw) { setColor(s, sw.dataset.hex); return; }
+    if (e.target.closest(".del")) deleteSubject(s.id);
+  });
+  subjList.addEventListener("input", e => { if (e.target.type === "color") { const s = rowOf(e); if (s) setColor(s, e.target.value.toLowerCase(), true); } });
+  subjList.addEventListener("change", e => {
+    if (e.target.type !== "text") return;
+    const s = rowOf(e); if (!s) return;
+    const name = e.target.value.trim().slice(0, 24);
+    if (!name || subjects.some(x => x.id !== s.id && x.name.toLowerCase() === name.toLowerCase())) { e.target.value = s.name; shake(e.target); return toast(name ? "That subject already exists" : "A subject needs a name"); }
+    s.name = name; saveSubjects(); renderSubjects();
+  });
+  $("#addSubjectBtn").addEventListener("click", () => toggleForm(subjectForm.hidden));
+
+  /* ============================================================
+     PAPER PROGRESS: marks per paper, averages, improvement
+     ============================================================ */
+  const skey = n => String(n).trim().toLowerCase();
+  const validPaper = p => p && typeof p.id === "string" && typeof p.subject === "string" && Number.isFinite(+p.score) && +p.max > 0 && /^\d{4}-\d{2}-\d{2}$/.test(p.date || "");
+  const cleanPaper = p => ({ id: p.id, subject: p.subject.slice(0, 24), name: String(p.name || "").slice(0, 40), score: +p.score, max: +p.max, date: p.date, ts: +p.ts || 0 });
+  let papers = (() => { const p = store.get("focus-papers", []); return Array.isArray(p) ? p.filter(validPaper).map(cleanPaper) : []; })();
+  let ppFilter = "all", ppChart = null;
+  const savePapers = () => { store.set("focus-papers", papers); H.onPapers(papers); };
+  const pct = p => (p.score / p.max) * 100;
+  const f1 = n => String(Math.round(n * 10) / 10);
+  const dToday = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const byDate = list => list.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.ts - b.ts);
+  const mean = list => list.length ? list.reduce((a, p) => a + pct(p), 0) / list.length : 0;
+  const subjColor = name => { const s = subjects.find(x => skey(x.name) === skey(name)); return s ? s.color : "#b4bac4"; };
+  const lblDate = d => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const deltaPill = d => '<span class="dlt ' + (d >= 0 ? "up" : "down") + '">' + (d >= 0 ? "▲ +" : "▼ ") + f1(d) + "</span>";
+
+  function renderPapers() {
+    // subject select + date default
+    const sel = $("#ppSubject"), cur = sel.value;
+    sel.innerHTML = subjects.map(s => '<option value="' + escH(s.name) + '">' + escH(s.name) + "</option>").join("");
+    if (subjects.some(s => s.name === cur)) sel.value = cur;
+    if (!$("#ppDate").value) $("#ppDate").value = dToday();
+
+    const all = byDate(papers), n = all.length;
+    const last = n ? pct(all[n - 1]) : 0, prevAvg = n > 1 ? mean(all.slice(0, -1)) : null;
+    const card = (t, v, extra) => '<div class="stat card"><span>' + t + "</span><strong" + (v === "–" ? ' class="dim"' : "") + ">" + v + (extra || "") + "</strong></div>";
+    $("#ppStats").innerHTML =
+      card("Average", n ? f1(mean(all)) + "%" : "–") +
+      card("Best", n ? f1(Math.max(...all.map(pct))) + "%" : "–") +
+      card("Latest", n ? f1(last) + "%" : "–") +
+      card("Latest vs average", prevAvg === null ? "–" : (last - prevAvg >= 0 ? "+" : "") + f1(last - prevAvg) + " pts");
+
+    // filter chips
+    const names = subjects.map(s => s.name);
+    all.forEach(p => { if (!names.some(x => skey(x) === skey(p.subject))) names.push(p.subject); });
+    if (ppFilter !== "all" && !names.some(x => skey(x) === ppFilter)) ppFilter = "all";
+    $("#ppChips").innerHTML = '<span class="chip' + (ppFilter === "all" ? " on" : "") + '" style="--c:var(--accent);--oc:var(--on-accent)"><button type="button" class="chip-main" data-k="all">All subjects</button></span>' +
+      names.map(nm => { const c = subjColor(nm); return '<span class="chip' + (ppFilter === skey(nm) ? " on" : "") + '" style="--c:' + c + ";--oc:" + onColor(hexToRgb(c)) + '"><button type="button" class="chip-main" data-k="' + escH(skey(nm)) + '"><i class="chip-dot"></i>' + escH(nm) + "</button></span>"; }).join("");
+
+    // per-subject summary
+    const rows = names.map(nm => {
+      const L = all.filter(p => skey(p.subject) === skey(nm)); if (!L.length) return "";
+      const a = mean(L), lt = pct(L[L.length - 1]), c = subjColor(nm), pa = L.length > 1 ? mean(L.slice(0, -1)) : null;
+      return '<li class="pp-row" style="--c:' + c + '"><span class="nm"><i class="pdot"></i>' + escH(nm) + ' <small>' + L.length + (L.length === 1 ? " paper" : " papers") + '</small></span>' +
+        "<span><b>" + f1(a) + "%</b> avg · latest " + f1(lt) + "% · best " + f1(Math.max(...L.map(pct))) + "% " + (pa === null ? "" : deltaPill(lt - pa)) + "</span>" +
+        '<span class="meter"><i style="width:' + Math.min(100, a) + "%;background:" + c + '"></i></span></li>';
+    }).join("");
+    $("#ppSubjects").innerHTML = rows || '<li class="empty">Your subject averages will show up here.</li>';
+
+    // recent papers
+    $("#ppList").innerHTML = all.length ? all.slice().reverse().slice(0, 12).map(p => '<li class="pp-row" style="--c:' + subjColor(p.subject) + '"><span class="nm"><i class="pdot"></i>' + escH(p.subject) + (p.name ? " · " + escH(p.name) : "") + " <small>" + lblDate(p.date) + "</small></span><span><b>" + f1(p.score) + "/" + f1(p.max) + "</b> · " + f1(pct(p)) + '% <button type="button" class="btn ghost small pp-del" data-id="' + escH(p.id) + '" data-fx="ripple">Delete</button></span></li>').join("") : '<li class="empty">No papers yet. Add your first marks above.</li>';
+  }
+
+  function drawPapers(animate) {
+    const cv = $("#ppChart"), empty = $("#ppEmpty");
+    if (ppChart) { ppChart.destroy(); ppChart = null; }
+    const base = byDate(ppFilter === "all" ? papers : papers.filter(p => skey(p.subject) === ppFilter));
+    empty.hidden = base.length > 0; cv.parentElement.hidden = base.length === 0;
+    if (!base.length || typeof Chart === "undefined" || !cv.offsetParent) return;
+    const css = getComputedStyle(document.documentElement), mu = css.getPropertyValue("--muted").trim(), ink = css.getPropertyValue("--ink").trim();
+    const dates = [...new Set(base.map(p => p.date))], m = mean(base), flat = dates.map(() => +m.toFixed(1)), datasets = [];
+    if (ppFilter === "all") {
+      [...new Map(base.map(p => [skey(p.subject), p.subject])).values()].forEach(nm => {
+        const L = base.filter(p => skey(p.subject) === skey(nm)), c = subjColor(nm);
+        datasets.push({ label: nm, data: dates.map(d => { const x = L.filter(p => p.date === d); return x.length ? +mean(x).toFixed(1) : null; }), borderColor: c, backgroundColor: c, borderWidth: 2.5, tension: 0.3, pointRadius: 4, spanGaps: true });
+      });
+      datasets.push({ label: "Overall average", data: flat, borderColor: ink, borderDash: [6, 6], borderWidth: 1.5, pointRadius: 0 });
+    } else {
+      const c = subjColor(ppFilter), scores = dates.map(d => +mean(base.filter(p => p.date === d)).toFixed(1));
+      let sum = 0, cnt = 0;
+      const running = dates.map(d => { base.filter(p => p.date === d).forEach(p => { sum += pct(p); cnt++; }); return +(sum / cnt).toFixed(1); });
+      datasets.push({ label: "Marks", data: scores, borderColor: c, backgroundColor: c, borderWidth: 3, tension: 0.3, pointRadius: 5, pointBackgroundColor: scores.map(s => s >= m ? "#6fbf97" : "#e29a9a"), pointBorderColor: c });
+      datasets.push({ label: "Running average", data: running, borderColor: ink, borderWidth: 1.5, tension: 0.3, pointRadius: 0, borderColor: mu });
+      datasets.push({ label: "Average", data: flat, borderColor: ink, borderDash: [6, 6], borderWidth: 1.5, pointRadius: 0 });
+    }
+    ppChart = new Chart(cv, { type: "line", data: { labels: dates.map(lblDate), datasets },
+      options: { maintainAspectRatio: false, animation: animate ? { duration: 1400, easing: "easeOutQuart" } : false, interaction: { mode: "index", intersect: false },
+        scales: { x: { ticks: { color: mu, maxTicksLimit: 8 }, grid: { display: false } }, y: { min: 0, max: 100, ticks: { color: mu, callback: v => v + "%" }, grid: { color: "rgba(128,128,128,.15)" } } },
+        plugins: { legend: { labels: { color: mu, usePointStyle: true, boxWidth: 8 } }, tooltip: { callbacks: { label: c => c.dataset.label + ": " + c.parsed.y + "%" } } } } });
+  }
+
+  $("#ppForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const subject = $("#ppSubject").value, score = parseFloat($("#ppMarks").value), max = parseFloat($("#ppMax").value) || 100;
+    if (!subject) return toast("Add a subject first");
+    if (!Number.isFinite(score) || score < 0 || score > max) { shake($("#ppMarks")); return toast("Marks must be between 0 and " + f1(max)); }
+    papers.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), subject, name: $("#ppName").value.trim().slice(0, 40), score, max, date: $("#ppDate").value || dToday(), ts: Date.now() });
+    if (papers.length > 600) papers = byDate(papers).slice(-600);
+    savePapers(); $("#ppMarks").value = ""; $("#ppName").value = ""; renderPapers(); drawPapers(true); toast("Paper added");
+  });
+  $("#ppList").addEventListener("click", e => {
+    const b = e.target.closest(".pp-del"); if (!b) return;
+    papers = papers.filter(p => p.id !== b.dataset.id); savePapers(); renderPapers(); drawPapers(true);
+  });
+  $("#ppChips").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { ppFilter = b.dataset.k; renderPapers(); drawPapers(true); } });
+
+  /* "New" badges disappear once the tab has been opened */
+  const seen = store.get("focus-seen", {});
+  $$(".tab .new").forEach(b => { if (seen[b.closest(".tab").dataset.tab]) b.remove(); });
+
+  Object.assign(H, {
+    getPapers: () => papers,
+    applyPapers(list) {
+      papers = (Array.isArray(list) ? list : []).filter(validPaper).map(cleanPaper);
+      store.set("focus-papers", papers); renderPapers(); drawPapers(false);
+    },
+    afterSubjects() { if (!listLock) renderSubjectList(); renderPapers(); drawPapers(false); },
+    markSeen(name) { if (seen[name]) return; seen[name] = 1; store.set("focus-seen", seen); const b = $('.tab[data-tab="' + name + '"] .new'); if (b) b.remove(); },
+    drawPapers
+  });
+  H.ready = true;
+  renderSubjectList(); renderPapers();
+
+  /* Bridge for the Firebase layer in this same file */
+  Object.assign(H, {
+    $, $$, place, burst, timer, showTab,
+    getSubjects: subjectList, getTasks: () => tasks, getPrefs: () => prefs,
+    applySubjects(list) {
+      const clean = Array.isArray(list) ? list.filter(s => s && typeof s.id === "string" && typeof s.name === "string" && s.name.trim() && hexOk(s.color)) : [];
+      subjects = migrate(clean.length ? clean : baseSubjects).map(s => ({ id: s.id, name: s.name.trim().slice(0, 24), color: s.color.toLowerCase(), locked: false }));
+      if (!subjects.some(s => s.id === activeId)) activeId = subjects[0].id;
+      store.set("focus-subjects", subjectList()); store.set("focus-subject", activeId);
+      renderSubjects(); applyAccent();
+      if (clean.length && JSON.stringify(subjectList()) !== JSON.stringify(clean.map(s => ({ id: s.id, name: s.name.trim().slice(0, 24), color: s.color.toLowerCase() })))) H.onSubjects(subjectList());
+    },
+    applyTasks(list) {
+      tasks = (Array.isArray(list) ? list : []).filter(t => t && typeof t.text === "string").map(t => ({ id: Number(t.id) || 0, text: t.text, done: !!t.done }));
+      nextId = tasks.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+      store.set("focus-tasks", tasks); renderTasks();
+    },
+    applyPrefs(p) {
+      if (!p || typeof p !== "object") return;
+      Object.keys(limits).forEach(k => { const n = Math.round(Number(p[k])); if (Number.isFinite(n)) prefs[k] = Math.min(limits[k][1], Math.max(limits[k][0], n)); });
+      if (typeof p.sound === "boolean") prefs.sound = p.sound;
+      if (typeof p.auto === "boolean") prefs.auto = p.auto;
+      prefs.dark = typeof p.dark === "boolean" ? p.dark : null;
+      if (navs.includes(p.nav)) prefs.nav = p.nav;
+      store.set("focus-prefs", prefs); syncPrefControls(); applyTheme(); applyNav(); applyAccent();
+      if (!timer.running && !timer.paused) { timer.resetLength(); timer.refresh(); }
+    }
+  });
 
   requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.remove("boot")));
+})();
+
+
+/* ================================================================
+   FIREBASE LAYER: Auth + Firestore (collection "users").
+   Everything for one person lives in ONE document: users/{uid}
+   (profile, subjects, tasks, papers and a "days" map with the
+   focus time per day), so saving is a single write and the whole
+   site reads from the same live snapshot.
+   ================================================================ */
+(() => {
+  "use strict";
+  const H = window.Morrow, $ = H.$, $$ = H.$$;
+  const ADMIN = "gethminahalangoda@gmail.com";
+  const BADGE = '<svg class="vb" viewBox="0 0 24 24" role="img" aria-label="Verified"><path fill="#3b9bf5" d="M12 1l3 2.2 3.7-.2 1.2 3.5 3 2.2-1.1 3.5 1.1 3.5-3 2.2-1.2 3.5-3.7-.2L12 23l-3-2.2-3.7.2-1.2-3.5-3-2.2L2.2 12 1.1 8.5l3-2.2 1.2-3.5L9 3z"/><path d="M7.5 12.3l3 3 6-6.3" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const CHK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const dstr = d => { d = d || new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const ago = n => { const d = new Date(); d.setDate(d.getDate() - n); return dstr(d); };
+  const key = n => String(n).trim().toLowerCase().replace(/[.~*\/\[\]]/g, "_").slice(0, 30);
+  const fmt = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? h + "h " + m + "m" : m + "m"; };
+  // 0.1 pts/min in the 1st hour of the day, 0.2 in the 2nd ... capped at 0.6
+  const pts = (prev, add) => { let p = 0, s = prev; const e = prev + add; while (s < e) { const h = Math.floor(s / 3600), end = Math.min(e, (h + 1) * 3600); p += (end - s) / 60 * Math.min(0.1 * (h + 1), 0.6); s = end; } return +p.toFixed(2); };
+  const av = u => u && u.photoURL ? '<img src="' + esc(u.photoURL) + '" alt="">' : esc(((u && u.name) || "?").trim().charAt(0).toUpperCase() || "?");
+  const daysOf = u => (u && u.days && typeof u.days === "object") ? u.days : {};
+
+  let auth, db, user = null, me = null, ref = null, unsub = null, setupErr = "";
+  let chart = null, range = 7, dirty = false, photo = "", goal = 4, hadUser = false, memo = {};
+  const rk = { list: null, cat: "all", unsub: null };
+
+  if (typeof firebase === "undefined") setupErr = "Firebase did not load. Check your internet connection.";
+  else if (typeof firebaseConfig === "undefined" || !firebaseConfig.apiKey || /YOUR_/.test(firebaseConfig.apiKey)) setupErr = "Add your Firebase keys to firebase-config.js.";
+  else {
+    try {
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth(); db = firebase.firestore();
+      auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+    } catch (e) { setupErr = e.message; }
+  }
+  if (setupErr) { const d = document.createElement("div"); d.className = "card setup"; d.textContent = "Setup needed: " + setupErr; $("main").prepend(d); }
+
+  const errMsg = (what, e) => {
+    console.error(what, e);
+    return what + (e && e.code === "permission-denied" ? ": Firestore rules are blocking this. Update your rules." : ": " + ((e && (e.code || e.message)) || "unknown error"));
+  };
+
+  /* ---------- Auth ---------- */
+  const login = () => {
+    if (!auth) { H.toast("Setup needed: " + setupErr); return Promise.resolve(false); }
+    return auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(() => true).catch(e => {
+      if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") H.toast("Sign-in failed: " + (e.code || e.message));
+      return false;
+    });
+  };
+  H.canStart = () => !!user;   // studying always needs an account
+  H.beforeStart = go => { if (user) return go(); H.toast("Sign in to start studying"); login().then(ok => { if (ok) go(); }); };
+
+  // First visit: welcome dialog asking people to sign in
+  const wel = $("#welcome");
+  const hideWelcome = () => { wel.hidden = true; };
+  const flag = { get: () => { try { return localStorage.getItem("focus-welcomed"); } catch (e) { return "1"; } }, set: () => { try { localStorage.setItem("focus-welcomed", "1"); } catch (e) { /* ignore */ } } };
+  $("#wSignIn").addEventListener("click", () => login().then(ok => { if (ok) hideWelcome(); }));
+  $("#wLater").addEventListener("click", hideWelcome);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !wel.hidden) hideWelcome(); });
+  $("#authBtn").addEventListener("click", () => user ? H.showTab("preferences") : login());
+
+  const newDoc = u => ({
+    name: u.displayName || "Student", email: u.email, photoURL: u.photoURL || "", bio: "", dailyGoal: 4,
+    subjects: H.getSubjects(), tasks: H.getTasks(), prefs: JSON.parse(JSON.stringify(H.getPrefs())), papers: H.getPapers(),
+    days: {}, totalPoints: 0, totalSec: 0, sessionCount: 0, studying: false, studyingAt: 0,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  if (auth) auth.onAuthStateChanged(async u => {
+    if (u) hideWelcome();
+    else if (!flag.get()) { flag.set(); wel.hidden = false; $("#wSignIn").focus(); }   // new visitor, signed out
+    user = u; if (unsub) unsub(); unsub = null; me = null; memo = {}; dirty = false;
+    ref = u ? db.collection("users").doc(u.uid) : null;
+    if (u) {
+      hadUser = true;
+      try {
+        const s = await ref.get();
+        if (!s.exists) await ref.set(newDoc(u));
+        else if (s.data().email !== u.email) await ref.update({ email: u.email });
+      } catch (e) { H.toast(errMsg("Could not load your profile", e)); }
+      unsub = ref.onSnapshot(s => { me = s.data() || null; render(); }, e => H.toast(errMsg("Lost connection to your profile", e)));
+    } else {
+      if (hadUser) { H.applyTasks([]); H.applySubjects(null); H.applyPapers([]); hadUser = false; }
+      if (rk.unsub) { rk.unsub(); rk.unsub = null; } rk.list = null;
+      render();
+    }
+  });
+
+  /* ---------- Saving settings (debounced) ---------- */
+  const upd = (() => {
+    let t, patch = {};
+    return p => {
+      Object.assign(patch, p); clearTimeout(t);
+      t = setTimeout(() => { const x = patch; patch = {}; if (ref) ref.update(x).catch(e => H.toast(errMsg("Could not save changes", e))); }, 500);
+    };
+  })();
+  H.onSubjects = s => { if (user) upd({ subjects: s }); };
+  H.onTasks = t => { if (user) upd({ tasks: t }); };
+  H.onPapers = p => { if (user) upd({ papers: p }); };
+  H.onPrefs = p => { if (user) upd({ prefs: JSON.parse(JSON.stringify(p)) }); };
+
+  /* ---------- Studying presence ---------- */
+  H.studying = on => { if (ref) ref.update({ studying: on, studyingAt: Date.now() }).catch(() => {}); };
+  setInterval(() => { const t = H.timer; if (t.running && t.isFocus()) H.studying(true); }, 60000);
+  addEventListener("pagehide", () => { if (H.timer.running) H.studying(false); });
+
+  /* ---------- Saving a session: ONE merge-write, no transaction ---------- */
+  H.session = (sec, subject) => {
+    if (!ref || sec < 1) return;
+    const F = firebase.firestore.FieldValue, today = dstr(), k = key(subject), all = daysOf(me);
+    const prev = (all[today] && all[today].total) || 0, got = pts(prev, sec);
+    const days = { [today]: { total: F.increment(sec), pts: F.increment(got), by: { [k]: F.increment(sec) } } };
+    Object.keys(all).filter(d => d < ago(400)).forEach(d => { days[d] = F.delete(); });   // keep the document small
+    ref.set({ days, totalPoints: F.increment(got), totalSec: F.increment(sec), sessionCount: F.increment(1), lastSessionAt: Date.now() }, { merge: true })
+      .catch(e => H.toast(errMsg("Could not save the session", e)));
+    H.toast("Saved " + fmt(sec) + " · +" + got + " pts");
+  };
+
+  /* ---------- Render ---------- */
+  function render() {
+    const b = $("#authBtn");
+    if (user) { b.innerHTML = '<span class="avatar">' + av(me || { name: user.displayName, photoURL: user.photoURL }) + '</span><span class="nm">' + esc((me && me.name) || "Account") + "</span>"; b.classList.add("signed"); b.setAttribute("aria-label", "Open preferences"); }
+    else { b.textContent = "Sign in with Google"; b.classList.remove("signed"); b.removeAttribute("aria-label"); }
+    if (me) {
+      const s = JSON.stringify(me.subjects), t = JSON.stringify(me.tasks), p = JSON.stringify(me.prefs), pp = JSON.stringify(me.papers);
+      if (memo.s !== s) { memo.s = s; H.applySubjects(me.subjects); }
+      if (memo.t !== t) { memo.t = t; H.applyTasks(me.tasks); }
+      if (memo.p !== p) { memo.p = p; H.applyPrefs(me.prefs); }
+      if (memo.pp !== pp) { memo.pp = pp; if (me.papers !== undefined) H.applyPapers(me.papers); }
+    }
+    renderStreak();
+    if (!dirty) fillProfile();
+    if (!$("#panel-progress").hidden) drawProg(false);
+    if (!$("#panel-ranking").hidden) startRank();
+  }
+
+  /* ---------- Streak: computed from the saved days (1 minute counts) ---------- */
+  function streakInfo() {
+    const d = daysOf(me), ok = x => d[x] && d[x].total >= 60;
+    let cur = 0, i = ok(dstr()) ? 0 : 1;
+    while (i < 800 && ok(ago(i))) { cur++; i++; }
+    let best = 0, run = 0, prev = null;
+    Object.keys(d).filter(ok).sort().forEach(k => {
+      run = prev && Math.round((new Date(k + "T00:00:00") - new Date(prev + "T00:00:00")) / 864e5) === 1 ? run + 1 : 1;
+      best = Math.max(best, run); prev = k;
+    });
+    if (me && (me.lastStudyDate === dstr() || me.lastStudyDate === ago(1))) cur = Math.max(cur, me.streak || 0);   // older saves
+    return { cur, best: Math.max(best, cur, (me && me.bestStreak) || 0), ok };
+  }
+  function renderStreak() {
+    const s = streakInfo(), txt = s.cur + " day streak";
+    $("#chipTxt").textContent = txt; $("#wkStreak").textContent = txt; $("#wkBest").textContent = "Best: " + s.best + " days";
+    const now = new Date(), mon = new Date(now); mon.setDate(now.getDate() - (now.getDay() + 6) % 7);
+    const legacy = (me && me.studyDays) || [];
+    $("#days").innerHTML = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((l, i) => {
+      const d = new Date(mon); d.setDate(mon.getDate() + i); const x = dstr(d);
+      return '<div class="day' + (s.ok(x) || legacy.includes(x) ? " done" : "") + (x === dstr() ? " today" : "") + '" style="--i:' + i + '"><span class="dot">' + CHK + "</span>" + l + "</div>";
+    }).join("");
+  }
+
+  /* ---------- Progress (reads the live "days" map) ---------- */
+  $$("#rngSeg button").forEach(b => b.addEventListener("click", () => {
+    $$("#rngSeg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    H.place($("#rngInd"), b); range = +b.dataset.r; drawProg(true);
+  }));
+  function count(el, to) { const t0 = performance.now(); (function f(t) { const p = Math.min(1, (t - t0) / 900); el.textContent = (to * (1 - Math.pow(1 - p, 3))).toFixed(1); if (p < 1) requestAnimationFrame(f); })(t0); }
+  function drawProg(animate) {
+    const D = daysOf(me), t = dstr(), n = new Date(), mon = new Date(n); mon.setDate(n.getDate() - (n.getDay() + 6) % 7);
+    const ms = dstr(mon), today = (D[t] && D[t].total) || 0, target = ((me && me.dailyGoal) || 4) * 3600;
+    const week = Object.keys(D).filter(d => d >= ms && d <= t).reduce((a, d) => a + (D[d].total || 0), 0);
+    $("#stToday").textContent = fmt(today); $("#stWeek").textContent = fmt(week);
+    const tp = (me && me.totalPoints) || 0;
+    if (animate) count($("#stPts"), tp); else $("#stPts").textContent = tp.toFixed(1);
+    const pc = Math.min(100, Math.round(today / target * 100)), bar = $("#goalBar");
+    $("#goalTx").textContent = fmt(today) + " of " + fmt(target); $("#goalPct").textContent = pc + "%";
+    if (animate) { bar.style.width = "0%"; requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = pc + "%"; })); } else bar.style.width = pc + "%";
+    if (typeof Chart === "undefined") return;
+    const css = getComputedStyle(document.documentElement), ink = css.getPropertyValue("--ink").trim(), mu = css.getPropertyValue("--muted").trim();
+    const dl = [...Array(range)].map((_, i) => ago(range - 1 - i));
+    const val = (d, k) => Math.round((D[d] ? (k ? (D[d].by || {})[k] : D[d].total) : 0) / 60) || 0;
+    const subs = H.getSubjects().map(s => ({ k: key(s.name), name: s.name, color: s.color })), known = new Set(subs.map(s => s.k)), extra = new Set();
+    dl.forEach(d => Object.keys((D[d] && D[d].by) || {}).forEach(k => { if (!known.has(k)) extra.add(k); }));
+    const lines = subs.concat([...extra].map(k => ({ k, name: k, color: "#b4bac4" }))).filter(s => dl.some(d => val(d, s.k) > 0));
+    if (chart) chart.destroy();
+    chart = new Chart($("#chart"), {
+      type: "line",
+      data: { labels: dl.map(d => d.slice(5)), datasets: [{ label: "Total", data: dl.map(d => val(d)), borderColor: ink, borderWidth: 3, tension: 0.35, pointRadius: 2 }].concat(lines.map(s => ({ label: s.name, data: dl.map(d => val(d, s.k)), borderColor: s.color, borderWidth: 2.5, tension: 0.35, pointRadius: 0 }))) },
+      options: { maintainAspectRatio: false, animation: animate ? { duration: 1400, easing: "easeOutQuart" } : false, interaction: { mode: "index", intersect: false },
+        scales: { x: { ticks: { color: mu, maxTicksLimit: 8 }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: mu }, grid: { color: "rgba(128,128,128,.15)" } } },
+        plugins: { legend: { labels: { color: mu, usePointStyle: true, boxWidth: 8 } } } }
+    });
+  }
+
+  /* ---------- Ranking ---------- */
+  function startRank() {
+    if (!user) { renderRank(); return; }
+    if (rk.unsub) { renderRank(); return; }
+    rk.unsub = db.collection("users").limit(200).onSnapshot(s => { rk.list = s.docs.map(d => Object.assign({ id: d.id }, d.data())); renderRank(); },
+      e => { rk.unsub = null; const x = $("#rankEmpty"); x.hidden = false; x.textContent = errMsg("Rankings could not load", e); });
+  }
+  setInterval(() => { if (!$("#panel-ranking").hidden && rk.list) renderRank(); }, 30000);
+  $("#rkChips").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { rk.cat = b.dataset.k; renderRank(); } });
+  $("#rankList").addEventListener("pointermove", e => { const r = e.target.closest(".spot"); if (!r) return; const b = r.getBoundingClientRect(); r.style.setProperty("--mx", e.clientX - b.left + "px"); r.style.setProperty("--my", e.clientY - b.top + "px"); });
+  function renderRank() {
+    const list = $("#rankList"), empty = $("#rankEmpty"), chips = $("#rkChips");
+    if (!user) { list.innerHTML = ""; chips.innerHTML = ""; $("#rkNote").textContent = ""; empty.hidden = false; empty.textContent = "Sign in with Google to see the rankings."; return; }
+    if (!rk.list) return;
+    const t = dstr(), live = u => u.studying && Date.now() - (u.studyingAt || 0) < 150000;
+    const subs = [...new Map(rk.list.flatMap(u => u.subjects || []).map(s => [key(s.name), s.name])).values()].slice(0, 10);
+    const cats = [["all", "All subjects"]].concat(subs.map(s => ["s:" + key(s), s]), [["alltime", "All time"]]);
+    if (!cats.some(c => c[0] === rk.cat)) rk.cat = "all";
+    chips.innerHTML = cats.map(c => '<span class="chip' + (rk.cat === c[0] ? " on" : "") + '" style="--c:var(--accent);--oc:var(--on-accent)"><button type="button" class="chip-main" data-k="' + esc(c[0]) + '">' + esc(c[1]) + "</button></span>").join("");
+    $("#rkNote").textContent = rk.cat === "alltime" ? "All-time ranking by points." : "Daily ranking. It starts fresh every day.";
+    const today = u => daysOf(u)[t] || null;
+    const val = u => { if (rk.cat === "alltime") return u.totalPoints || 0; const x = today(u); return !x ? 0 : rk.cat === "all" ? x.total || 0 : (x.by || {})[rk.cat.slice(2)] || 0; };
+    const rows = rk.list.map(u => Object.assign({}, u, { v: val(u) })).filter(u => u.v > 0 || (rk.cat !== "alltime" && live(u))).sort((a, b) => b.v - a.v).slice(0, 50);
+    const max = rows.length ? Math.max(rows[0].v, 1) : 1;
+    empty.hidden = rows.length > 0; empty.textContent = "Nobody here yet. Save a session to take the first spot.";
+    list.innerHTML = rows.map((u, i) => '<li class="row spot' + (u.id === user.uid ? " me" : "") + '" data-fx="spot"><span class="pos">' + (i + 1) + '</span><span class="avatar">' + av(u) + '</span><span class="name"><span>' + esc(u.name) + "</span>" + (u.email === ADMIN ? BADGE : "") + (live(u) ? '<span class="live">Studying</span>' : "") + '</span><span class="meter"><i style="--w:' + Math.round(u.v / max * 100) + '%"></i></span><span class="mins">' + (rk.cat === "alltime" ? u.v.toFixed(1) + " pts" : fmt(u.v)) + "</span></li>").join("");
+  }
+
+  /* ---------- Profile (Preferences tab) ---------- */
+  function fillProfile() {
+    if (!$("#pName")) return;
+    $("#pName").value = me ? me.name || "" : ""; $("#pBio").value = me ? me.bio || "" : "";
+    photo = me ? me.photoURL || "" : ""; goal = me && me.dailyGoal ? me.dailyGoal : 4; $("#goalOut").textContent = goal;
+    $("#pAv").innerHTML = av({ name: me && me.name, photoURL: photo });
+  }
+  ["#pName", "#pBio"].forEach(s => $(s).addEventListener("input", () => { dirty = true; }));
+  $$("[data-g]").forEach(b => b.addEventListener("click", () => { goal = Math.min(10, Math.max(4, goal + +b.dataset.g)); $("#goalOut").textContent = goal; dirty = true; }));
+  $("#pFile").addEventListener("change", e => {
+    const f = e.target.files[0]; if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"), s = Math.min(img.width, img.height); c.width = c.height = 160;
+      c.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 160, 160);
+      photo = c.toDataURL("image/jpeg", 0.8); dirty = true; $("#pAv").innerHTML = '<img src="' + photo + '" alt="">';
+    };
+    img.onerror = () => H.toast("That image could not be read.");
+    img.src = URL.createObjectURL(f);
+  });
+  $("#pSave").addEventListener("click", async () => {
+    if (!user) { login(); return; }
+    const name = $("#pName").value.trim(); if (!name) return H.toast("Enter a name.");
+    try { await ref.update({ name, bio: $("#pBio").value.trim(), photoURL: photo, dailyGoal: goal }); dirty = false; H.toast("Changes saved"); }
+    catch (e) { H.toast(errMsg("Could not save", e)); }
+  });
+  $("#pOut").addEventListener("click", async () => {
+    if (!auth || !user) return H.toast("You are not signed in.");
+    if (H.timer.running) H.timer.reset();
+    await H.studying(false); await auth.signOut(); H.toast("Logged out"); H.showTab("timer");
+  });
+  $("#pDel").addEventListener("click", async () => {
+    if (!user || prompt("This permanently deletes your account and data. Type DELETE to confirm.") !== "DELETE") return;
+    const run = async () => {
+      try {   // older versions stored sessions in a sub-collection; clean it up if it exists
+        const ss = await ref.collection("sessions").get();
+        for (let i = 0; i < ss.docs.length; i += 400) { const b = db.batch(); ss.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit(); }
+      } catch (e) { /* nothing to clean up */ }
+      await ref.delete(); await user.delete();
+    };
+    try {
+      if (unsub) { unsub(); unsub = null; }
+      try { await run(); }
+      catch (e) { if (e.code === "auth/requires-recent-login") { await user.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider()); await run(); } else throw e; }
+      H.toast("Account deleted"); H.showTab("timer");
+    } catch (e) { H.toast(errMsg("Could not delete the account", e)); }
+  });
+
+  H.onTab = name => {
+    if (name === "progress") { H.place($("#rngInd"), $('#rngSeg [aria-pressed="true"]'), false); drawProg(true); }
+    else if (name === "ranking") startRank();
+    else if (name === "preferences" && !dirty) fillProfile();
+  };
+  render();
 })();
