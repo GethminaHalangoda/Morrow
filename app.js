@@ -10,8 +10,8 @@
   // Hooks the Firebase layer fills in (the app works without them)
   const toastEl = document.createElement("div");
   toastEl.className = "toast"; toastEl.setAttribute("role", "status"); document.body.appendChild(toastEl);
-  function toast(m) { toastEl.textContent = m; toastEl.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove("on"), 2800); }
-  const H = window.Morrow = { toast, beforeStart: go => go(), studying() {}, session() {}, onSubjects() {}, onTasks() {}, onPrefs() {}, onPapers() {}, onTab() {}, canStart: () => true };
+  function toast(m, ms) { toastEl.textContent = m; toastEl.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove("on"), ms || 2800); }
+  const H = window.Morrow = { toast, beforeStart: go => go(), studying() {}, session() {}, onSubjects() {}, onTasks() {}, onPrefs() {}, onPapers() {}, onTab() {}, canStart: () => true, onCountdowns() {}, running() {}, notify() {}, getDays: () => ({}), signedIn: () => false };
 
   const store = {
     get(key, fallback) {
@@ -247,7 +247,7 @@
      TABS
      ============================================================ */
   const tabs = $$(".tab");
-  const titles = { timer: "Timer", tasks: "Tasks", subjects: "Subjects", progress: "Progress", papers: "Paper progress", ranking: "Ranking", preferences: "Preferences" };
+  const titles = { timer: "Timer", tasks: "Tasks", subjects: "Subjects", progress: "Progress", papers: "Paper progress", countdown: "Countdown", pulse: "Pulse", ranking: "Ranking", preferences: "Preferences" };
   const navIndicator = $("#navIndicator");
   const segIndicator = $("#segIndicator");
   let currentTab = "timer";
@@ -266,7 +266,12 @@
     place(navIndicator, $('.tab[aria-selected="true"]'));
     if (name === "timer") place(segIndicator, $('#seg [aria-pressed="true"]'), false);
     H.onTab(name);
-    if (H.ready) { H.markSeen(name); if (name === "papers") H.drawPapers(true); }
+    if (H.ready) {
+      H.markSeen(name);
+      if (name === "papers") H.drawPapers(true);
+      if (name === "countdown") H.renderCountdown(true);
+      const cur = $('.tab[aria-selected="true"]'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ inline: "center", block: "nearest" });
+    }
   }
 
   tabs.forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
@@ -287,7 +292,7 @@
   /* ============================================================
      PREFERENCES
      ============================================================ */
-  const defaults = { timer: 30, focus: 25, short: 5, long: 15, sound: true, auto: false, dark: null, nav: "left" };
+  const defaults = { timer: 30, focus: 25, short: 5, long: 15, sound: true, auto: false, dark: null, nav: "left", ghost: false, awake: true };
   const saved = store.get("focus-prefs", {});
   const prefs = Object.assign({}, defaults, saved && typeof saved === "object" ? saved : {});
   const limits = { timer: [1, 99], focus: [1, 90], short: [1, 30], long: [1, 60] };
@@ -626,6 +631,7 @@
       this.raf = 0;
       if (this.running) { if (this.mode === "stopwatch") this.accMs = Date.now() - this.t0; else this.remainingMs = Math.max(0, this.endAt - Date.now()); }
       if (this.running && this.isFocus()) H.studying(false);
+      if (this.running) H.running(false);
       this.running = false;
       ringWrap.classList.remove("running");
     },
@@ -639,6 +645,7 @@
       this.finished = false;
       ringWrap.classList.add("running");
       if (this.isFocus()) H.studying(true);
+      H.running(true);
       this.handle = setInterval(() => this.tick(), 250);
       this.loop();
       this.refresh();
@@ -670,6 +677,7 @@
     finish() {
       const counts = this.isFocus(), secs = Math.round(this.totalMs / 1000);
       this.halt();
+      H.notify(counts ? "Focus session complete" : "Break is over", this.mode === "pomodoro" ? (counts ? "Nice work. Time for a break." : "Ready for the next focus session?") : "Session finished");
       if (counts) H.session(secs, activeSubject().name);
       this.remainingMs = 0;
       this.paint();
@@ -926,7 +934,6 @@
     const sel = $("#ppSubject"), cur = sel.value;
     sel.innerHTML = subjects.map(s => '<option value="' + escH(s.name) + '">' + escH(s.name) + "</option>").join("");
     if (subjects.some(s => s.name === cur)) sel.value = cur;
-    if (!$("#ppDate").value) $("#ppDate").value = dToday();
 
     const all = byDate(papers), n = all.length;
     const last = n ? pct(all[n - 1]) : 0, prevAvg = n > 1 ? mean(all.slice(0, -1)) : null;
@@ -991,7 +998,7 @@
     const subject = $("#ppSubject").value, score = parseFloat($("#ppMarks").value), max = parseFloat($("#ppMax").value) || 100;
     if (!subject) return toast("Add a subject first");
     if (!Number.isFinite(score) || score < 0 || score > max) { shake($("#ppMarks")); return toast("Marks must be between 0 and " + f1(max)); }
-    papers.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), subject, name: $("#ppName").value.trim().slice(0, 40), score, max, date: $("#ppDate").value || dToday(), ts: Date.now() });
+    papers.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), subject, name: $("#ppName").value.trim().slice(0, 40), score, max, date: dToday(), ts: Date.now() });
     if (papers.length > 600) papers = byDate(papers).slice(-600);
     savePapers(); $("#ppMarks").value = ""; $("#ppName").value = ""; renderPapers(); drawPapers(true); toast("Paper added");
   });
@@ -1011,16 +1018,185 @@
       papers = (Array.isArray(list) ? list : []).filter(validPaper).map(cleanPaper);
       store.set("focus-papers", papers); renderPapers(); drawPapers(false);
     },
-    afterSubjects() { if (!listLock) renderSubjectList(); renderPapers(); drawPapers(false); },
+    afterSubjects() { if (!listLock) renderSubjectList(); renderPapers(); drawPapers(false); fillCdSubjects(); },
     markSeen(name) { if (seen[name]) return; seen[name] = 1; store.set("focus-seen", seen); const b = $('.tab[data-tab="' + name + '"] .new'); if (b) b.remove(); },
     drawPapers
   });
   H.ready = true;
   renderSubjectList(); renderPapers();
 
+  /* ============================================================
+     COUNTDOWN: exams and milestones (compact array in the profile)
+     ============================================================ */
+  const cdKey = n => String(n).trim().toLowerCase().replace(/[.~*\/\[\]]/g, "_").slice(0, 30);
+  const ymd = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const dayStr = n => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
+  const validCd = c => c && typeof c.id === "string" && typeof c.name === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.date || "");
+  const cleanCd = c => ({ id: c.id, name: c.name.slice(0, 50), date: c.date, time: /^\d{2}:\d{2}$/.test(c.time || "") ? c.time : "00:00", created: +c.created || Date.now(), subject: String(c.subject || "").slice(0, 24), pinned: !!c.pinned, main: !!c.main });
+  const defaultCds = () => [{ id: "al2027", name: "2027 A/L Examination", date: "2027-08-03", time: "08:30", created: Date.now(), subject: "", pinned: true, main: true }];
+  const normCds = list => {
+    if (list.length && !list.some(c => c.main)) list[0].main = true;
+    let seenMain = false; list.forEach(c => { if (c.main && seenMain) c.main = false; if (c.main) seenMain = true; });
+    return list;
+  };
+  let cds = (() => { const raw = store.get("focus-countdowns", null); return normCds(Array.isArray(raw) ? raw.filter(validCd).map(cleanCd) : defaultCds()); })();
+  store.set("focus-countdowns", cds);
+  let cdEditing = null;
+  const cdTarget = c => new Date(c.date + "T" + c.time + ":00").getTime();
+  const cdSave = () => { store.set("focus-countdowns", cds); H.onCountdowns(cds); renderCountdown(); };
+  const cdBadgeText = ms => { const d = Math.floor(ms / 864e5); return d >= 1 ? "D-" + d : Math.max(0, Math.ceil(ms / 36e5)) + "H"; };
+  const cdWhen = t => new Date(t).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+  const cdActions = (c, isMain) => '<div class="cd-actions">' +
+    '<button type="button" class="btn ghost small" data-act="pin" data-id="' + escH(c.id) + '" aria-pressed="' + c.pinned + '">' + (c.pinned ? "Unpin from timer" : "Pin to timer") + "</button>" +
+    (isMain ? "" : '<button type="button" class="btn ghost small" data-act="main" data-id="' + escH(c.id) + '">Make main</button>') +
+    '<button type="button" class="btn ghost small" data-act="edit" data-id="' + escH(c.id) + '">Edit</button>' +
+    '<button type="button" class="btn ghost small" data-act="del" data-id="' + escH(c.id) + '">Delete</button></div>';
+
+  function cdPace(c, left) {
+    if (left <= 0) return "";
+    if (!H.signedIn()) return "Sign in and log some sessions to see your pace.";
+    const D = H.getDays(), k = c.subject ? cdKey(c.subject) : null, val = x => !x ? 0 : k ? ((x.by || {})[k] || 0) : (x.total || 0);
+    let week = 0; for (let i = 0; i < 7; i++) week += val(D[dayStr(i)]);
+    const avg = week / 7 / 3600, since = ymd(new Date(c.created)); let done = 0;
+    Object.keys(D).forEach(d => { if (d >= since) done += val(D[d]); });
+    const tag = c.subject ? " on " + c.subject : "", logged = "You have logged " + f1(done / 3600) + " hrs" + tag + " since this goal was created.";
+    if (avg <= 0) return "Log a few sessions and your pace will show up here. " + logged;
+    return "At your current 7-day average (" + f1(avg) + " hrs/day" + tag + "), you will log " + Math.round(avg * left / 864e5) + " more focus hours before this date. " + logged;
+  }
+
+  function renderCountdown(animate) {
+    const now = Date.now(), main = cds.find(c => c.main), hero = $("#cdHero");
+    if (!main) hero.innerHTML = '<div class="empty">No countdown yet. Add your exam or a milestone below.</div>';
+    else {
+      const t = cdTarget(main), left = t - now, span = Math.max(1, t - main.created), pc = Math.min(100, Math.max(0, (now - main.created) / span * 100));
+      const d = Math.floor(left / 864e5), h = Math.floor(left % 864e5 / 36e5), m = Math.floor(left % 36e5 / 6e4);
+      hero.innerHTML = '<div class="cd-eyebrow">Main countdown' + (main.pinned ? " · pinned to timer" : "") + '</div><div class="cd-name">' + escH(main.name) + "</div>" +
+        '<div class="cd-big">' + (left > 0 ? "<span>" + d + "</span><small>DAYS</small><span>" + h + "</span><small>HRS</small><span>" + m + "</span><small>MIN</small>" : "<span>Done</span>") + "</div>" +
+        '<div class="cd-date">' + cdWhen(t) + (main.subject ? " · " + escH(main.subject) : "") + "</div>" +
+        '<p class="cd-pace">' + escH(cdPace(main, left)) + "</p>" +
+        '<div class="cd-bar"><i style="width:' + (animate ? 0 : pc) + '%"></i></div>' +
+        '<div class="cd-meta"><span>' + f1(pc) + "% of the time has passed</span><span>Goal set " + lblDate(ymd(new Date(main.created))) + "</span></div>" + cdActions(main, true);
+      if (animate) requestAnimationFrame(() => requestAnimationFrame(() => { const b = $(".cd-bar i", hero); if (b) b.style.width = pc + "%"; }));
+    }
+    const others = cds.filter(c => !c.main).sort((a, b) => cdTarget(a) - cdTarget(b));
+    $("#cdList").innerHTML = others.length ? others.map(c => {
+      const left = cdTarget(c) - now;
+      return '<li class="cd-item"><div><b>' + escH(c.name) + '</b><div class="cd-sub">' + cdWhen(cdTarget(c)) + (c.subject ? ' <span class="pill">' + escH(c.subject) + "</span>" : "") + '</div></div><span class="dbadge">' + (left > 0 ? cdBadgeText(left) : "Done") + "</span>" + cdActions(c, false) + "</li>";
+    }).join("") : '<li class="empty">Add smaller targets such as a term test or a past paper goal.</li>';
+    // small badge above the timer clock
+    const pin = cds.filter(c => c.pinned && cdTarget(c) > now).sort((a, b) => cdTarget(a) - cdTarget(b))[0], bd = $("#cdBadge");
+    bd.hidden = !pin; if (pin) { bd.textContent = cdBadgeText(cdTarget(pin) - now); bd.title = pin.name + ". Open Countdown"; }
+  }
+
+  const cdForm = $("#cdForm");
+  function fillCdSubjects() {
+    const sel = $("#cdSubject"), cur = sel.value;
+    sel.innerHTML = '<option value="">No linked subject</option>' + subjects.map(s => '<option value="' + escH(s.name) + '">' + escH(s.name) + "</option>").join("");
+    sel.value = Array.from(sel.options).some(o => o.value === cur) ? cur : "";
+  }
+  function openCdForm(c) {
+    cdEditing = c ? c.id : null; cdForm.hidden = false; fillCdSubjects();
+    $("#cdFormTitle").textContent = c ? "Edit countdown" : "New countdown";
+    $("#cdName").value = c ? c.name : ""; $("#cdDate").value = c ? c.date : ""; $("#cdTime").value = c ? c.time : "08:00"; $("#cdSubject").value = c ? c.subject : "";
+    $("#cdName").focus(); cdForm.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  $("#cdNew").addEventListener("click", () => openCdForm(null));
+  $("#cdCancel").addEventListener("click", () => { cdForm.hidden = true; cdEditing = null; });
+  cdForm.addEventListener("submit", e => {
+    e.preventDefault();
+    const name = $("#cdName").value.trim().slice(0, 50), date = $("#cdDate").value, time = $("#cdTime").value || "00:00", subject = $("#cdSubject").value;
+    if (!name) { shake($("#cdName")); return toast("Give the countdown a name"); }
+    if (!date) { shake($("#cdDate")); return toast("Choose a date"); }
+    if (cdEditing) { const c = cds.find(x => x.id === cdEditing); if (c) Object.assign(c, { name, date, time, subject }); }
+    else cds.push({ id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, date, time, created: Date.now(), subject, pinned: false, main: cds.length === 0 });
+    normCds(cds); cdForm.hidden = true; cdEditing = null; cdSave(); toast("Countdown saved");
+  });
+  $("#panel-countdown").addEventListener("click", e => {
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const c = cds.find(x => x.id === b.dataset.id); if (!c) return;
+    if (b.dataset.act === "edit") return openCdForm(c);
+    if (b.dataset.act === "pin") c.pinned = !c.pinned;
+    else if (b.dataset.act === "main") cds.forEach(x => { x.main = x === c; });
+    else if (b.dataset.act === "del") { if (!confirm("Delete this countdown?")) return; cds = cds.filter(x => x !== c); normCds(cds); }
+    cdSave();
+  });
+  $("#cdBadge").addEventListener("click", () => showTab("countdown"));
+  setInterval(renderCountdown, 60000);   // once a minute is plenty
+
+  /* ============================================================
+     KEEP THE TIMER ALIVE with the screen off (best effort on the web):
+     screen wake lock, a silent audio loop + media session (shows a
+     timer notification with a live progress bar), and an alert when a
+     Pomodoro block ends.
+     ============================================================ */
+  const bg = { wake: null, audio: null, poll: 0 };
+  const silentWav = () => {
+    const sr = 8000, n = sr * 2, buf = new ArrayBuffer(44 + n), v = new DataView(buf), w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, 36 + n, true); w(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, "data"); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128 + Math.round(2 * Math.sin(i / 40)));   // far below anything audible
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  };
+  async function wakeLock() {
+    try {
+      if (prefs.awake && "wakeLock" in navigator && !bg.wake) { bg.wake = await navigator.wakeLock.request("screen"); bg.wake.addEventListener("release", () => { bg.wake = null; }); }
+    } catch (e) { bg.wake = null; }
+  }
+  function sessionInfo() {
+    if (!("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession, pomo = timer.mode === "pomodoro";
+    ms.metadata = new MediaMetadata({ title: (timer.isFocus() ? "Focusing" : "Break") + " · " + activeSubject().name, artist: "Morrow · " + (pomo ? "Pomodoro" : "Stopwatch"), album: "Study timer", artwork: [{ src: "App logo.jpg", sizes: "512x512", type: "image/jpeg" }] });
+    ms.playbackState = "playing";
+    try {
+      const el = timer.elapsed(), dur = pomo ? Math.max(1, timer.totalMs / 1000) : Math.max(4 * 3600, Math.ceil((el + 1800) / 3600) * 3600);
+      ms.setPositionState({ duration: dur, playbackRate: 1, position: Math.min(el, dur) });
+    } catch (e) { /* not supported here */ }
+  }
+  H.running = on => {
+    if (on) {
+      wakeLock();
+      if (!bg.audio) { bg.audio = new Audio(silentWav()); bg.audio.loop = true; bg.audio.volume = 0.05; }
+      bg.audio.play().catch(() => {});
+      sessionInfo(); clearInterval(bg.poll); bg.poll = setInterval(sessionInfo, 20000);
+      if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+    } else {
+      clearInterval(bg.poll); if (bg.audio) bg.audio.pause();
+      if (bg.wake) { bg.wake.release().catch(() => {}); bg.wake = null; }
+      if ("mediaSession" in navigator) { navigator.mediaSession.playbackState = "none"; navigator.mediaSession.metadata = null; }
+    }
+  };
+  if ("mediaSession" in navigator) {
+    try {
+      const ms = navigator.mediaSession;
+      ms.setActionHandler("pause", () => timer.pause());
+      ms.setActionHandler("stop", () => timer.pause());
+      ms.setActionHandler("play", () => H.beforeStart(() => timer.start()));
+    } catch (e) { /* some browsers lack these actions */ }
+  }
+  document.addEventListener("visibilitychange", () => {   // back on screen: catch up straight away
+    if (document.visibilityState !== "visible" || !timer.running) return;
+    wakeLock(); if (bg.audio && bg.audio.paused) bg.audio.play().catch(() => {});
+    timer.tick(); timer.paint(); sessionInfo();
+  });
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) navigator.serviceWorker.register("sw.js").catch(() => {});
+  H.notify = (title, body) => {
+    try {
+      if (!("Notification" in window) || Notification.permission !== "granted" || !("serviceWorker" in navigator)) return;
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      navigator.serviceWorker.ready.then(r => r.showNotification(title, { body, icon: "App logo.jpg", badge: "App logo.jpg", tag: "morrow-end", renotify: true })).catch(() => {});
+    } catch (e) { /* ignore */ }
+  };
+
+  Object.assign(H, {
+    getCountdowns: () => cds,
+    applyCountdowns(list) { cds = normCds((Array.isArray(list) ? list : []).filter(validCd).map(cleanCd)); store.set("focus-countdowns", cds); renderCountdown(); },
+    renderCountdown
+  });
+  fillCdSubjects(); renderCountdown();
+
   /* Bridge for the Firebase layer in this same file */
   Object.assign(H, {
-    $, $$, place, burst, timer, showTab,
+    $, $$, place, burst, timer, showTab, activeSubject,
     getSubjects: subjectList, getTasks: () => tasks, getPrefs: () => prefs,
     applySubjects(list) {
       const clean = Array.isArray(list) ? list.filter(s => s && typeof s.id === "string" && typeof s.name === "string" && s.name.trim() && hexOk(s.color)) : [];
@@ -1040,6 +1216,8 @@
       Object.keys(limits).forEach(k => { const n = Math.round(Number(p[k])); if (Number.isFinite(n)) prefs[k] = Math.min(limits[k][1], Math.max(limits[k][0], n)); });
       if (typeof p.sound === "boolean") prefs.sound = p.sound;
       if (typeof p.auto === "boolean") prefs.auto = p.auto;
+      if (typeof p.ghost === "boolean") prefs.ghost = p.ghost;
+      if (typeof p.awake === "boolean") prefs.awake = p.awake;
       prefs.dark = typeof p.dark === "boolean" ? p.dark : null;
       if (navs.includes(p.nav)) prefs.nav = p.nav;
       store.set("focus-prefs", prefs); syncPrefControls(); applyTheme(); applyNav(); applyAccent();
@@ -1084,6 +1262,7 @@
     try {
       firebase.initializeApp(firebaseConfig);
       auth = firebase.auth(); db = firebase.firestore();
+      try { db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) { /* not supported here */ }
       auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
     } catch (e) { setupErr = e.message; }
   }
@@ -1095,14 +1274,38 @@
   };
 
   /* ---------- Auth ---------- */
+  const authHelp = e => {
+    const c = e && e.code, host = location.hostname || "this page";
+    if (c === "auth/unauthorized-domain") return 'add "' + host + '" under Firebase > Authentication > Settings > Authorized domains, then try again.';
+    if (c === "auth/operation-not-allowed") return "turn on Google in Firebase > Authentication > Sign-in method.";
+    if (c === "auth/invalid-api-key" || /api-key-not-valid/.test(c || "")) return "the API key in firebase-config.js is not valid.";
+    if (c === "auth/network-request-failed") return "no connection to Firebase. Check your internet and try again.";
+    if (c === "auth/web-storage-unsupported") return "this browser blocks storage (private mode or an in-app browser). Open the site in Chrome or Safari.";
+    if (c === "auth/internal-error") return "Firebase reported an internal error. Check that Google sign-in is enabled and this domain is authorised.";
+    return c || (e && e.message) || "unknown error";
+  };
+  const inApp = /FBAN|FBAV|Instagram|Line\/|WhatsApp|; wv\)|Snapchat|TikTok/i.test(navigator.userAgent);
   const login = () => {
-    if (!auth) { H.toast("Setup needed: " + setupErr); return Promise.resolve(false); }
-    return auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(() => true).catch(e => {
-      if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") H.toast("Sign-in failed: " + (e.code || e.message));
+    if (!auth) { H.toast("Setup needed: " + setupErr, 7000); return Promise.resolve(false); }
+    if (location.protocol === "file:") { H.toast("Open the site from http://localhost or your https address. Google sign-in cannot work from a file.", 8000); return Promise.resolve(false); }
+    if (inApp) { H.toast("Google blocks sign-in inside this app's browser. Open the site in Chrome or Safari.", 8000); return Promise.resolve(false); }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    return auth.signInWithPopup(provider).then(() => true).catch(e => {
+      if (e.code === "auth/popup-closed-by-user" || e.code === "auth/cancelled-popup-request") return false;
+      if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") {   // popups blocked: use a full-page redirect instead
+        H.toast("Opening Google sign-in...");
+        auth.signInWithRedirect(provider).catch(err => H.toast("Sign-in failed: " + authHelp(err), 8000));
+        return false;
+      }
+      console.error("Sign-in error", e);
+      H.toast("Sign-in failed: " + authHelp(e), 8000);
       return false;
     });
   };
+  if (auth) auth.getRedirectResult().catch(e => { if (e && e.code) H.toast("Sign-in failed: " + authHelp(e), 8000); });
   H.canStart = () => !!user;   // studying always needs an account
+  H.getDays = () => daysOf(me); H.signedIn = () => !!user;
   H.beforeStart = go => { if (user) return go(); H.toast("Sign in to start studying"); login().then(ok => { if (ok) go(); }); };
 
   // First visit: welcome dialog asking people to sign in
@@ -1116,7 +1319,7 @@
 
   const newDoc = u => ({
     name: u.displayName || "Student", email: u.email, photoURL: u.photoURL || "", bio: "", dailyGoal: 4,
-    subjects: H.getSubjects(), tasks: H.getTasks(), prefs: JSON.parse(JSON.stringify(H.getPrefs())), papers: H.getPapers(),
+    subjects: H.getSubjects(), tasks: H.getTasks(), prefs: JSON.parse(JSON.stringify(H.getPrefs())), papers: H.getPapers(), countdowns: H.getCountdowns(),
     days: {}, totalPoints: 0, totalSec: 0, sessionCount: 0, studying: false, studyingAt: 0,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -1124,7 +1327,7 @@
   if (auth) auth.onAuthStateChanged(async u => {
     if (u) hideWelcome();
     else if (!flag.get()) { flag.set(); wel.hidden = false; $("#wSignIn").focus(); }   // new visitor, signed out
-    user = u; if (unsub) unsub(); unsub = null; me = null; memo = {}; dirty = false;
+    user = u; if (unsub) unsub(); unsub = null; me = null; memo = {}; dirty = false; stopSparks(); stopPulse();
     ref = u ? db.collection("users").doc(u.uid) : null;
     if (u) {
       hadUser = true;
@@ -1133,10 +1336,10 @@
         if (!s.exists) await ref.set(newDoc(u));
         else if (s.data().email !== u.email) await ref.update({ email: u.email });
       } catch (e) { H.toast(errMsg("Could not load your profile", e)); }
-      unsub = ref.onSnapshot(s => { me = s.data() || null; render(); }, e => H.toast(errMsg("Lost connection to your profile", e)));
+      unsub = ref.onSnapshot(s => { me = s.data() || null; render(); listenSparks(); }, e => H.toast(errMsg("Lost connection to your profile", e)));
     } else {
       if (hadUser) { H.applyTasks([]); H.applySubjects(null); H.applyPapers([]); hadUser = false; }
-      if (rk.unsub) { rk.unsub(); rk.unsub = null; } rk.list = null;
+      if (rk.unsub) { rk.unsub(); rk.unsub = null; } rk.list = null; pr.list = [];
       render();
     }
   });
@@ -1152,10 +1355,14 @@
   H.onSubjects = s => { if (user) upd({ subjects: s }); };
   H.onTasks = t => { if (user) upd({ tasks: t }); };
   H.onPapers = p => { if (user) upd({ papers: p }); };
-  H.onPrefs = p => { if (user) upd({ prefs: JSON.parse(JSON.stringify(p)) }); };
+  H.onCountdowns = c => { if (user) upd({ countdowns: c }); };
+  H.onPrefs = p => {
+    if (user) upd({ prefs: JSON.parse(JSON.stringify(p)) });
+    if (!!p.ghost !== lastGhost) { lastGhost = !!p.ghost; presenceSync(); if (!$("#panel-pulse").hidden) renderPulse(); }
+  };
 
   /* ---------- Studying presence ---------- */
-  H.studying = on => { if (ref) ref.update({ studying: on, studyingAt: Date.now() }).catch(() => {}); };
+  H.studying = on => { if (ref) ref.update({ studying: on, studyingAt: Date.now() }).catch(() => {}); presenceSync(on); };
   setInterval(() => { const t = H.timer; if (t.running && t.isFocus()) H.studying(true); }, 60000);
   addEventListener("pagehide", () => { if (H.timer.running) H.studying(false); });
 
@@ -1182,6 +1389,8 @@
       if (memo.t !== t) { memo.t = t; H.applyTasks(me.tasks); }
       if (memo.p !== p) { memo.p = p; H.applyPrefs(me.prefs); }
       if (memo.pp !== pp) { memo.pp = pp; if (me.papers !== undefined) H.applyPapers(me.papers); }
+      const cc = JSON.stringify(me.countdowns);
+      if (memo.cc !== cc) { memo.cc = cc; if (me.countdowns !== undefined) H.applyCountdowns(me.countdowns); else H.onCountdowns(H.getCountdowns()); }
     }
     renderStreak();
     if (!dirty) fillProfile();
@@ -1322,7 +1531,99 @@
     } catch (e) { H.toast(errMsg("Could not delete the account", e)); }
   });
 
+  /* ---------- Pulse: a quiet co-working room (presence/{uid}) ---------- */
+  const pr = { unsub: null, list: [] };
+  let hbTimer = null, lastGhost = !!H.getPrefs().ghost, sparkUnsub = null, sparkDay = "";
+
+  function presenceNow() {   // what to publish right now, or null when idle / hidden
+    const t = H.timer;
+    if (!user || !t.running || !t.isFocus() || H.getPrefs().ghost) return null;
+    const now = Date.now(), sub = H.activeSubject();
+    return { status: "focusing", subject: sub.name, color: sub.color, mode: t.mode, startTime: now - t.elapsed() * 1000, endTime: t.mode === "pomodoro" ? t.endAt : now + 30 * 60000 };
+  }
+  function presenceSync(force) {   // written on Start/Resume and Pause/Finish (plus a 15 min touch for the stopwatch)
+    if (!user || !db) return;
+    const p = force === false ? null : presenceNow();
+    const photo = me && me.photoURL && me.photoURL.length < 20000 ? me.photoURL : "";
+    const base = { uid: user.uid, name: (me && me.name) || user.displayName || "Student", photoURL: photo, email: user.email };
+    db.collection("presence").doc(user.uid).set(p ? Object.assign(base, p) : Object.assign(base, { status: "idle", endTime: 0, updatedAt: Date.now() })).catch(() => {});
+    clearInterval(hbTimer); hbTimer = p && p.mode === "stopwatch" ? setInterval(() => presenceSync(), 15 * 60000) : null;
+  }
+
+  const sparkedKey = () => "focus-sparked-" + dstr();
+  const sparkedSet = () => { try { return new Set(JSON.parse(localStorage.getItem(sparkedKey()) || "[]")); } catch (e) { return new Set(); } };
+  const markSparked = uid => { try { const s = sparkedSet(); s.add(uid); localStorage.setItem(sparkedKey(), JSON.stringify([...s])); } catch (e) { /* ignore */ } };
+  const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>';
+
+  function startPulse() {
+    if (!user) { renderPulse(); return; }
+    if (pr.unsub) { renderPulse(); return; }
+    pr.unsub = db.collection("presence").where("status", "==", "focusing").limit(60).onSnapshot(s => { pr.list = s.docs.map(d => Object.assign({ id: d.id }, d.data())); renderPulse(); },
+      e => { pr.unsub = null; const x = $("#pulseEmpty"); x.hidden = false; x.textContent = errMsg("The room could not load", e); });
+  }
+  function stopPulse() { if (pr.unsub) { pr.unsub(); pr.unsub = null; } }
+  function stopSparks() { if (sparkUnsub) { sparkUnsub(); sparkUnsub = null; } }
+
+  function renderPulse() {
+    const grid = $("#pulseGrid"), empty = $("#pulseEmpty"), count = $("#pulseCount"), pill = count.parentElement, now = Date.now();
+    $("#pulseNote").textContent = H.getPrefs().ghost ? "Ghost mode is on: others cannot see you, but you can see them." : "Ghost mode hides you from this room while you still see everyone else.";
+    if (!user) { grid.innerHTML = ""; count.textContent = "Sign in to see who is focusing"; pill.classList.add("off"); empty.hidden = false; empty.textContent = "Sign in with Google to join the room."; return; }
+    const act = pr.list.filter(p => p.status === "focusing" && p.endTime + 60000 > now).sort((a, b) => a.startTime - b.startTime), n = act.length, sent = sparkedSet();
+    count.textContent = n === 0 ? "Nobody is focusing right now" : n + (n === 1 ? " person" : " people") + " focusing right now";
+    pill.classList.toggle("off", n === 0);
+    empty.hidden = n > 0; empty.textContent = "The room is quiet. Start a session and light it up.";
+    grid.innerHTML = act.map((p, i) => {
+      const mine = p.uid === user.uid;
+      return '<article class="card pcard" style="--c:' + esc(p.color || "#b9aee8") + ";animation-delay:" + i * 50 + 'ms" data-start="' + p.startTime + '" data-end="' + p.endTime + '" data-mode="' + esc(p.mode) + '">' +
+        '<div class="pc-top"><span class="avatar">' + av(p) + '</span><div class="pc-who"><div class="pc-name"><span>' + esc(p.name) + "</span>" + (p.email === ADMIN ? BADGE : "") + '</div><span class="pill"><i></i>' + esc(p.subject) + "</span></div>" +
+        (mine ? '<span class="pc-you">You</span>' : '<button type="button" class="spark' + (sent.has(p.uid) ? " sent" : "") + '" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '" aria-label="Send ' + esc(p.name) + ' a focus spark">' + BOLT + "</button>") + "</div>" +
+        '<div class="pc-meta"><span class="pc-time"></span><span>' + (p.mode === "pomodoro" ? "Pomodoro" : "Stopwatch") + '</span></div><div class="pc-bar"><i></i></div></article>';
+    }).join("");
+    pulseTick();
+  }
+  function pulseTick() {   // the thin progress bars are computed locally: no extra reads or writes
+    const now = Date.now();
+    $$("#pulseGrid .pcard").forEach(c => {
+      const s = +c.dataset.start, e = +c.dataset.end, el = Math.max(0, now - s), pomo = c.dataset.mode === "pomodoro";
+      c.querySelector(".pc-bar i").style.width = ((pomo ? Math.min(1, el / Math.max(1, e - s)) : (el % 3600e3) / 3600e3) * 100) + "%";
+      c.querySelector(".pc-time").textContent = pomo ? Math.min(Math.floor(el / 60000), Math.round((e - s) / 60000)) + "m of " + Math.round((e - s) / 60000) + "m" : fmt(el / 1000);
+    });
+  }
+  setInterval(() => { if (!$("#panel-pulse").hidden) { pulseTick(); if (pr.list.length) renderPulse(); } }, 5000);
+
+  $("#pulseGrid").addEventListener("click", e => { const b = e.target.closest(".spark"); if (b) sendSpark(b, b.dataset.uid, b.dataset.name); });
+  async function sendSpark(btn, toUid, toName) {
+    if (!user) return login();
+    if (sparkedSet().has(toUid)) return H.toast("You already sent " + toName + " a spark today");
+    const today = dstr(), F = firebase.firestore.FieldValue, id = today + "_" + user.uid + "_" + toUid, d = daysOf(me)[today] || {};
+    try { await db.collection("sparks").doc(id).set({ day: today, from: user.uid, to: toUid, fromName: (me && me.name) || "Someone", ts: Date.now() }); }
+    catch (err) { markSparked(toUid); btn.classList.add("sent"); return H.toast(err.code === "permission-denied" ? "You already sent " + toName + " a spark today" : errMsg("Could not send the spark", err)); }
+    markSparked(toUid); btn.classList.add("sent", "zap");
+    const boost = (d.sparkSent || 0) < 5;   // the first 5 sparks you send each day earn a tiny boost
+    if (boost) ref.set({ totalPoints: F.increment(0.1), days: { [today]: { pts: F.increment(0.1), sparkSent: F.increment(1) } } }, { merge: true }).catch(() => {});
+    H.toast("Spark sent to " + toName + (boost ? " · +0.1 pts" : ""));
+  }
+  function listenSparks() {   // incoming sparks (today only), shown as a quiet toast
+    if (!user || !db) return;
+    const today = dstr();
+    if (sparkUnsub && sparkDay === today) return;
+    stopSparks(); sparkDay = today;
+    sparkUnsub = db.collection("sparks").where("to", "==", user.uid).where("day", "==", today).onSnapshot(s => {
+      s.docChanges().forEach(ch => {
+        if (ch.type !== "added" || !me) return;
+        const id = ch.doc.id, from = ch.doc.data().fromName || "Someone", got = (daysOf(me)[today] && daysOf(me)[today].sparkGot) || [];
+        if (got.includes(id)) return;   // already shown and rewarded on this account
+        H.toast(from + " sent you a focus spark");
+        const F = firebase.firestore.FieldValue, day = { sparkGot: F.arrayUnion(id) }, patch = { days: { [today]: day } };
+        if (got.length < 5) { day.pts = F.increment(0.1); patch.totalPoints = F.increment(0.1); }
+        ref.set(patch, { merge: true }).catch(() => {});
+      });
+    }, () => {});
+  }
+  setInterval(() => { if (user && sparkDay !== dstr()) listenSparks(); }, 60000);
+
   H.onTab = name => {
+    if (name === "pulse") startPulse(); else stopPulse();
     if (name === "progress") { H.place($("#rngInd"), $('#rngSeg [aria-pressed="true"]'), false); drawProg(true); }
     else if (name === "ranking") startRank();
     else if (name === "preferences" && !dirty) fillProfile();
