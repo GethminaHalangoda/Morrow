@@ -514,9 +514,7 @@ html{scrollbar-gutter:stable}
 #panel-subjects .subject-form{max-width:none;margin:0 0 14px}
 .subj-row .field,.pp-grid .field{width:100%}
 #ppChips{justify-content:flex-start;max-width:none;margin:0 0 16px}
-.pp-grid{grid-template-columns:repeat(6,1fr)}
-.pp-grid label:nth-child(1),.pp-grid label:nth-child(2),.pp-grid label:nth-child(5){grid-column:span 2}
-.pp-grid label:nth-child(3),.pp-grid label:nth-child(4){grid-column:span 3}
+.pp-grid{grid-template-columns:repeat(4,1fr)}
 .stat strong.dim{color:var(--muted);font-weight:600}
 @media(max-width:760px){
  .pp-grid{grid-template-columns:1fr 1fr}
@@ -531,6 +529,56 @@ html{scrollbar-gutter:stable}
 .welcome-card h2{margin:0 0 8px;font-size:1.3rem}.welcome-card p{margin:0 0 20px;color:var(--muted);font-size:.95rem;line-height:1.5}
 .welcome-card .btn{width:100%;margin-top:10px}.welcome-card .btn:first-of-type{margin-top:0}
 @keyframes wfade{from{opacity:0}}@keyframes wpop{from{opacity:0;transform:translateY(14px) scale(.96)}}
+
+/* ============ v4: Pulse, Countdown, timer badge ============ */
+.cd-badge{display:block;margin:0 auto 10px;padding:4px 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--muted);font-size:.8rem;font-weight:700;font-variant-numeric:tabular-nums;cursor:pointer;transition:color .2s,border-color .2s}
+.cd-badge:hover{color:var(--ink);border-color:var(--accent)}
+.cd-hero{padding:28px 26px;margin-bottom:14px}
+.cd-eyebrow{color:var(--muted);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase}
+.cd-name{font-size:1.1rem;font-weight:600;margin:6px 0 14px}
+.cd-big{font-size:clamp(2.2rem,8vw,3.8rem);font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.05;display:flex;align-items:baseline;flex-wrap:wrap}
+.cd-big small{font-size:.3em;font-weight:700;color:var(--muted);letter-spacing:.08em;margin:0 .9em 0 .35em}
+.cd-date{color:var(--muted);font-size:.88rem;margin-top:10px}
+.cd-pace{margin:16px 0 0;font-size:.93rem;line-height:1.55}
+.cd-bar{height:6px;border-radius:6px;background:var(--line);margin-top:20px;overflow:hidden}
+.cd-bar i{display:block;height:100%;background:var(--accent);border-radius:6px;transition:width 1.2s cubic-bezier(.2,.9,.3,1)}
+.cd-meta{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:.8rem;margin-top:8px}
+.cd-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.cd-actions .btn{min-width:0}
+.cd-card{padding:22px;margin-bottom:14px}.cd-card h2{margin:0 0 4px;font-size:1rem;font-weight:600}
+.cd-card .chart-head{margin-bottom:6px}
+.cd-list{list-style:none;padding:0;margin:0}
+.cd-item{display:grid;grid-template-columns:1fr auto;gap:2px 14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.cd-item:last-child{border-bottom:0}.cd-item .cd-actions{grid-column:1/-1;margin-top:8px}
+.cd-sub{color:var(--muted);font-size:.82rem;margin-top:3px}
+.dbadge{font-variant-numeric:tabular-nums;font-weight:700;font-size:.85rem;padding:4px 11px;border-radius:999px;background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.cd-grid{grid-template-columns:repeat(4,1fr)}.row-btns{display:flex;gap:10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--c,var(--muted)) 24%,transparent);font-size:.76rem;width:fit-content}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--c,var(--muted))}
+.pulse-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.pulse-pill{display:inline-flex;align-items:center;gap:10px;padding:9px 16px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-weight:600;font-size:.92rem}
+.breath{width:9px;height:9px;border-radius:50%;background:#34c27a;animation:breath 3.6s ease-in-out infinite}
+.pulse-pill.off .breath{background:var(--muted);animation:none}
+@keyframes breath{0%,100%{box-shadow:0 0 0 0 #34c27a66;opacity:.6}50%{box-shadow:0 0 0 7px #34c27a00;opacity:1}}
+.ghost-ctl{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.9rem}
+.pulse-note{margin:10px 0 0;font-size:.82rem}
+.pulse-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+.pcard{padding:16px;display:grid;gap:12px;animation:wfade .4s both}
+.pc-top{display:flex;align-items:center;gap:12px}.pc-who{flex:1;min-width:0;display:grid;gap:6px}
+.pc-name{display:flex;align-items:center;gap:6px;font-weight:600;min-width:0}.pc-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc-you{font-size:.75rem;color:var(--muted)}
+.pc-meta{display:flex;justify-content:space-between;color:var(--muted);font-size:.8rem;font-variant-numeric:tabular-nums}
+.pc-bar{height:2px;border-radius:2px;background:var(--line);overflow:hidden}.pc-bar i{display:block;height:100%;width:0;background:var(--c,var(--accent));transition:width 1s linear}
+.spark{width:36px;height:36px;padding:0;border-radius:50%;border:1px solid var(--line-strong);background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:color .2s,border-color .2s,transform .15s}
+.spark svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+.spark:hover{color:var(--ink);border-color:var(--accent)}.spark.sent{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.spark.zap{animation:zap .6s ease}@keyframes zap{40%{transform:scale(1.35) rotate(-12deg)}}
+@media(max-width:1100px){.pulse-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.pulse-grid{grid-template-columns:1fr}.cd-grid{grid-template-columns:1fr 1fr}.cd-meta{flex-direction:column}}
+@media(max-width:760px){
+ .nav{overflow-x:auto;justify-content:flex-start;scrollbar-width:none}.nav::-webkit-scrollbar{display:none}
+ .nav .tab{flex:0 0 66px}
+}
 </style>
 </head>
 <body>
@@ -557,6 +605,12 @@ html{scrollbar-gutter:stable}
       </button>
       <button class="tab" role="tab" id="tab-papers" aria-controls="panel-papers" aria-selected="false" data-tab="papers" tabindex="-1">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/></svg>Papers<span class="new">New</span>
+      </button>
+      <button class="tab" role="tab" id="tab-countdown" aria-controls="panel-countdown" aria-selected="false" data-tab="countdown" tabindex="-1">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Countdown<span class="new">New</span>
+      </button>
+      <button class="tab" role="tab" id="tab-pulse" aria-controls="panel-pulse" aria-selected="false" data-tab="pulse" tabindex="-1">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>Pulse<span class="new">New</span>
       </button>
       <button class="tab" role="tab" id="tab-ranking" aria-controls="panel-ranking" aria-selected="false" data-tab="ranking" tabindex="-1">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M5 20v-6h4v6M10 20V6h4v14M15 20v-9h4v9"/></svg>Ranking
@@ -594,6 +648,8 @@ html{scrollbar-gutter:stable}
         <div class="subjects" id="subjects" role="group" aria-label="Subject"></div>
 
         
+
+        <button type="button" class="cd-badge" id="cdBadge" hidden></button>
 
         <div class="ring" id="ringWrap">
           <canvas id="wave" width="800" height="800" aria-hidden="true"></canvas>
@@ -702,7 +758,6 @@ html{scrollbar-gutter:stable}
           <label>Paper (optional)<input class="field" id="ppName" type="text" maxlength="40" placeholder="e.g. 2023 Paper I"></label>
           <label>Marks<input class="field" id="ppMarks" type="number" min="0" step="any" inputmode="decimal" required></label>
           <label>Out of<input class="field" id="ppMax" type="number" min="1" step="any" value="100"></label>
-          <label>Date<input class="field" id="ppDate" type="date"></label>
         </div>
         <button type="submit" class="btn" data-fx="magnetic ripple">Add paper</button>
       </form>
@@ -714,6 +769,36 @@ html{scrollbar-gutter:stable}
       </div>
       <div class="card" style="margin-top:14px"><h2>By subject</h2><ul class="pp-subj" id="ppSubjects"></ul></div>
       <div class="card" style="margin-top:14px"><h2>Recent papers</h2><ul class="pp-list" id="ppList"></ul></div>
+    </section>
+
+    <!-- ---------- COUNTDOWN ---------- -->
+    <section class="panel" id="panel-countdown" role="tabpanel" aria-labelledby="tab-countdown" hidden>
+      <div class="card cd-hero" id="cdHero"></div>
+      <div class="card cd-card">
+        <div class="chart-head"><h2>Milestones</h2><button type="button" class="btn small" id="cdNew" data-fx="magnetic ripple">+ New countdown</button></div>
+        <ul class="cd-list" id="cdList"></ul>
+      </div>
+      <form class="card cd-card cd-form" id="cdForm" hidden autocomplete="off">
+        <h2 id="cdFormTitle">New countdown</h2>
+        <div class="pp-grid cd-grid">
+          <label>Name<input class="field" id="cdName" type="text" maxlength="50" placeholder="e.g. Term test"></label>
+          <label>Date<input class="field" id="cdDate" type="date" required></label>
+          <label>Time<input class="field" id="cdTime" type="time" value="08:00"></label>
+          <label>Linked subject<select class="field" id="cdSubject"></select></label>
+        </div>
+        <div class="row-btns"><button type="submit" class="btn" data-fx="ripple">Save</button><button type="button" class="btn ghost" id="cdCancel" data-fx="ripple">Cancel</button></div>
+      </form>
+    </section>
+
+    <!-- ---------- PULSE ---------- -->
+    <section class="panel" id="panel-pulse" role="tabpanel" aria-labelledby="tab-pulse" hidden>
+      <div class="pulse-head">
+        <div class="pulse-pill off"><i class="breath"></i><span id="pulseCount">Nobody is focusing right now</span></div>
+        <div class="ghost-ctl"><span>Ghost mode</span><button type="button" class="switch" role="switch" aria-checked="false" aria-label="Ghost mode" data-pref="ghost"></button></div>
+      </div>
+      <p class="note pulse-note" id="pulseNote"></p>
+      <div class="pulse-grid" id="pulseGrid"></div>
+      <p class="empty" id="pulseEmpty" hidden></p>
     </section>
 
     <!-- ---------- RANKING ---------- -->
@@ -775,6 +860,10 @@ html{scrollbar-gutter:stable}
         <div class="pref">
           <div><h2>Start the next session automatically</h2><p>Pomodoro moves between focus and break without a click.</p></div>
           <button type="button" class="switch" role="switch" aria-checked="false" aria-label="Start the next session automatically" data-pref="auto"></button>
+        </div>
+        <div class="pref">
+          <div><h2>Keep the screen on while timing</h2><p>Stops the phone from sleeping in the middle of a session.</p></div>
+          <button type="button" class="switch" role="switch" aria-checked="true" aria-label="Keep the screen on while timing" data-pref="awake"></button>
         </div>
         <div class="pref">
           <div><h2>Dark mode</h2><p>Follows your device until you change it here.</p></div>
