@@ -11,7 +11,7 @@
   const toastEl = document.createElement("div");
   toastEl.className = "toast"; toastEl.setAttribute("role", "status"); document.body.appendChild(toastEl);
   function toast(m, ms) { toastEl.textContent = m; toastEl.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove("on"), ms || 2800); }
-  const H = window.Morrow = { toast, beforeStart: go => go(), studying() {}, session() {}, onSubjects() {}, onTasks() {}, onPrefs() {}, onPapers() {}, onTab() {}, canStart: () => true, onCountdowns() {}, running() {}, notify() {}, getDays: () => ({}), signedIn: () => false };
+  const H = window.Morrow = { toast, beforeStart: go => go(), studying() {}, session() {}, onSubjects() {}, onTasks() {}, onPrefs() {}, onPapers() {}, onTab() {}, canStart: () => true, onCountdowns() {}, running() {}, notify() {}, getDays: () => ({}), signedIn: () => false, onHomework() {}, setTarget() {} };
 
   const store = {
     get(key, fallback) {
@@ -169,6 +169,7 @@
   }
 
   function renderTasks(popId) {
+    mTaskLine();
     list.textContent = "";
     tasks.forEach(t => {
       const li = document.createElement("li");
@@ -217,7 +218,7 @@
       }
       saveTasks();
       renderTasks(id);
-    } else if (e.target.closest(".subj-del")) {
+    } else if (e.target.closest(".del")) {
       li.classList.add("leaving");
       setTimeout(() => {
         tasks = tasks.filter(t => t.id !== id);
@@ -247,7 +248,7 @@
      TABS
      ============================================================ */
   const tabs = $$(".tab");
-  const titles = { timer: "Timer", tasks: "Tasks", subjects: "Subjects", progress: "Progress", papers: "Paper progress", countdown: "Countdown", pulse: "Pulse", ranking: "Ranking", preferences: "Preferences" };
+  const titles = { timer: "Timer", tasks: "Tasks", subjects: "Subjects", progress: "Progress", papers: "Paper progress", homework: "Homework", countdown: "Countdown", pulse: "Pulse", ranking: "Ranking", preferences: "Preferences" };
   const navIndicator = $("#navIndicator");
   const segIndicator = $("#segIndicator");
   let currentTab = "timer";
@@ -268,6 +269,7 @@
     H.onTab(name);
     if (H.ready) {
       H.markSeen(name);
+      H.mobileSync(name);
       if (name === "papers") H.drawPapers(true);
       if (name === "countdown") H.renderCountdown(true);
       const cur = $('.tab[aria-selected="true"]'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ inline: "center", block: "nearest" });
@@ -874,7 +876,7 @@
       const li = document.createElement("li");
       li.className = "card subj-row"; li.dataset.id = s.id; li.style.setProperty("--c", s.color); li.style.animationDelay = i * 40 + "ms";
       li.innerHTML = '<button type="button" class="sw" aria-label="Change color of ' + escH(s.name) + '" aria-expanded="' + (palOpen === s.id) + '"></button>' +
-        '<input class="field" type="text" maxlength="24" aria-label="Subject name"><button type="button" class="btn ghost small subj-del" data-fx="ripple">Remove</button>';
+        '<input class="field" type="text" maxlength="24" aria-label="Subject name"><button type="button" class="m-only subj-edit" aria-label="Rename subject">Rename</button><button type="button" class="btn ghost small subj-del" data-fx="ripple">Remove</button>';
       $("input", li).value = s.name;
       const pal = document.createElement("div");
       pal.className = "pal"; pal.hidden = palOpen !== s.id;
@@ -899,7 +901,8 @@
     const s = rowOf(e); if (!s) return;
     if (e.target.closest(".sw")) { palOpen = palOpen === s.id ? null : s.id; renderSubjectList(); return; }
     const sw = e.target.closest("button.swatch"); if (sw) { setColor(s, sw.dataset.hex); return; }
-    if (e.target.closest(".del")) deleteSubject(s.id);
+    if (e.target.closest(".subj-edit")) { const inp = $("input[type=text]", e.target.closest(".subj-row")); inp.focus(); inp.select(); return; }
+    if (e.target.closest(".subj-del")) deleteSubject(s.id);
   });
   subjList.addEventListener("input", e => { if (e.target.type === "color") { const s = rowOf(e); if (s) setColor(s, e.target.value.toLowerCase(), true); } });
   subjList.addEventListener("change", e => {
@@ -1018,8 +1021,8 @@
       papers = (Array.isArray(list) ? list : []).filter(validPaper).map(cleanPaper);
       store.set("focus-papers", papers); renderPapers(); drawPapers(false);
     },
-    afterSubjects() { if (!listLock) renderSubjectList(); renderPapers(); drawPapers(false); fillCdSubjects(); },
-    markSeen(name) { if (seen[name]) return; seen[name] = 1; store.set("focus-seen", seen); const b = $('.tab[data-tab="' + name + '"] .new'); if (b) b.remove(); },
+    afterSubjects() { if (!listLock) renderSubjectList(); renderPapers(); drawPapers(false); fillCdSubjects(); renderHomework(); },
+    markSeen(name) { if (seen[name]) return; seen[name] = 1; store.set("focus-seen", seen); $$('.tab[data-tab="' + name + '"] .new, #mSeg [data-go="' + name + '"] .new').forEach(b => b.remove()); },
     drawPapers
   });
   H.ready = true;
@@ -1194,6 +1197,185 @@
   });
   fillCdSubjects(); renderCountdown();
 
+  /* ============================================================
+     HOMEWORK: per subject and lesson, as a checklist or plain text
+     ============================================================ */
+  const validHw = x => x && typeof x.id === "string" && typeof x.subject === "string" && typeof x.lesson === "string";
+  const uid6 = () => Math.random().toString(36).slice(2, 8);
+  const cleanHw = x => ({
+    id: x.id, subject: x.subject.slice(0, 24), lesson: x.lesson.slice(0, 60), mode: x.mode === "text" ? "text" : "list",
+    items: Array.isArray(x.items) ? x.items.filter(i => i && typeof i.text === "string").slice(0, 60).map(i => ({ id: String(i.id || uid6()), text: i.text.slice(0, 160), done: !!i.done })) : [],
+    text: String(x.text || "").slice(0, 1500), done: !!x.done, due: /^\d{4}-\d{2}-\d{2}$/.test(x.due || "") ? x.due : "", created: +x.created || Date.now()
+  });
+  let hws = (() => { const r = store.get("focus-homework", []); return Array.isArray(r) ? r.filter(validHw).map(cleanHw) : []; })();
+  let hwFilter = "all", hwMode = "list", hwJust = "";
+  const hwSave = () => { store.set("focus-homework", hws); H.onHomework(hws); renderHomework(); };
+  const hwDone = x => x.mode === "text" ? x.done : (x.items.length > 0 && x.items.every(i => i.done));
+  const hwDue = due => {
+    if (!due) return null;
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    const n = Math.round((new Date(due + "T00:00:00") - t0) / 864e5);
+    if (n < 0) return { t: "Overdue by " + (-n) + (n === -1 ? " day" : " days"), c: "over" };
+    if (n === 0) return { t: "Due today", c: "soon" };
+    if (n === 1) return { t: "Due tomorrow", c: "soon" };
+    return { t: "Due in " + n + " days", c: n <= 3 ? "soon" : "" };
+  };
+  const hwOrder = (a, b) => (hwDone(a) - hwDone(b)) || ((a.due || "9999") < (b.due || "9999") ? -1 : (a.due || "9999") > (b.due || "9999") ? 1 : a.created - b.created);
+
+  function hwCard(x, c) {
+    const done = hwDone(x), due = hwDue(x.due), id = escH(x.id);
+    let body;
+    if (x.mode === "text") {
+      body = '<p class="hw-text">' + escH(x.text) + '</p><div class="task hw-it' + (x.done ? " d" : "") + (hwJust === x.id ? " just" : "") + '"><button type="button" class="ck" data-act="tickText" aria-label="Mark as done"></button><span>' + (x.done ? "Done" : "Mark as done") + "</span></div>";
+    } else {
+      const n = x.items.filter(i => i.done).length, pc = x.items.length ? Math.round(n / x.items.length * 100) : 0;
+      body = '<div class="hw-bar"><i style="width:' + pc + '%"></i></div><small class="hw-prog">' + n + " of " + x.items.length + " done</small><ul class=\"hw-items\">" +
+        x.items.map(i => '<li class="task hw-it' + (i.done ? " d" : "") + (hwJust === i.id ? " just" : "") + '" data-item="' + escH(i.id) + '"><button type="button" class="ck" data-act="tick" aria-label="Toggle"></button><span>' + escH(i.text) + '</span><button type="button" class="hw-rm" data-act="rm" aria-label="Remove item">✕</button></li>').join("") +
+        '</ul><form class="hw-add"><input class="field" type="text" maxlength="160" placeholder="Add an item" aria-label="Add an item"><button type="submit" class="btn ghost small" data-fx="ripple">Add</button></form>';
+    }
+    return '<article class="card hw-card' + (done ? " done" : "") + '" style="--c:' + c + '" data-id="' + id + '"><div class="hw-top"><div class="hw-title"><b>' + escH(x.lesson) + "</b>" +
+      (due && !done ? '<span class="hw-due ' + due.c + '">' + due.t + "</span>" : done ? '<span class="hw-due">Done</span>' : "") + '</div><button type="button" class="btn ghost small" data-act="del" data-fx="ripple">Delete</button></div>' + body + "</article>";
+  }
+
+  function renderHomework() {
+    const sel = $("#hwSubject"), cur = sel.value;
+    sel.innerHTML = subjects.map(s => '<option value="' + escH(s.name) + '">' + escH(s.name) + "</option>").join("");
+    if (subjects.some(s => s.name === cur)) sel.value = cur;
+    const names = subjects.map(s => s.name);
+    hws.forEach(x => { if (!names.some(n => skey(n) === skey(x.subject))) names.push(x.subject); });
+    if (hwFilter !== "all" && !names.some(n => skey(n) === hwFilter)) hwFilter = "all";
+    $("#hwChips").innerHTML = '<span class="chip' + (hwFilter === "all" ? " on" : "") + '" style="--c:var(--accent);--oc:var(--on-accent)"><button type="button" class="chip-main" data-k="all">All subjects</button></span>' +
+      names.map(nm => { const c = subjColor(nm); return '<span class="chip' + (hwFilter === skey(nm) ? " on" : "") + '" style="--c:' + c + ";--oc:" + onColor(hexToRgb(c)) + '"><button type="button" class="chip-main" data-k="' + escH(skey(nm)) + '"><i class="chip-dot"></i>' + escH(nm) + "</button></span>"; }).join("");
+    let html = "", pending = 0, overdue = 0;
+    names.forEach(nm => {
+      if (hwFilter !== "all" && hwFilter !== skey(nm)) return;
+      const L = hws.filter(x => skey(x.subject) === skey(nm)).sort(hwOrder);
+      if (!L.length) return;
+      const open = L.filter(x => !hwDone(x)), c = subjColor(nm);
+      pending += open.length; overdue += open.filter(x => { const d = hwDue(x.due); return d && d.c === "over"; }).length;
+      html += '<section class="hw-group" style="--c:' + c + '"><h3 class="hw-gh"><i></i>' + escH(nm) + " <small>" + (open.length ? open.length + " to do" : "all done") + "</small></h3>" + L.map(x => hwCard(x, c)).join("") + "</section>";
+    });
+    $("#hwList").innerHTML = html; hwJust = "";
+    $("#hwEmpty").hidden = !!html;
+    $("#hwSum").textContent = pending ? pending + (pending === 1 ? " lesson" : " lessons") + " to do" + (overdue ? " · " + overdue + " overdue" : "") : "Nothing to do. Add homework when your teacher sets some.";
+  }
+
+  const hwPlace = () => { $("#hwBody").placeholder = hwMode === "list" ? "One item per line, for example:\nExercise 4A, questions 1 to 10\nRead the notes on page 32" : "Write the homework in your own words"; };
+  $$("#hwMode button").forEach(b => b.addEventListener("click", () => { hwMode = b.dataset.m; $$("#hwMode button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); hwPlace(); }));
+  $("#hwNew").addEventListener("click", () => { const f = $("#hwForm"); f.hidden = !f.hidden; if (!f.hidden) { renderHomework(); hwPlace(); $("#hwLesson").focus(); } });
+  $("#hwCancel").addEventListener("click", () => { $("#hwForm").hidden = true; });
+  $("#hwForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const subject = $("#hwSubject").value, lesson = $("#hwLesson").value.trim(), body = $("#hwBody").value.trim(), due = $("#hwDue").value;
+    if (!subject) return toast("Add a subject first");
+    if (!lesson) { shake($("#hwLesson")); return toast("Add the lesson or topic"); }
+    if (!body) { shake($("#hwBody")); return toast("Write the homework first"); }
+    const x = { id: "h" + Date.now().toString(36) + uid6(), subject, lesson, mode: hwMode, items: [], text: "", done: false, due, created: Date.now() };
+    if (hwMode === "list") {
+      x.items = body.split(/\n+/).map(s => s.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim()).filter(Boolean).slice(0, 60).map(t => ({ id: uid6(), text: t.slice(0, 160), done: false }));
+      if (!x.items.length) return toast("Add at least one item");
+    } else x.text = body.slice(0, 1500);
+    hws.push(x); $("#hwLesson").value = ""; $("#hwBody").value = ""; $("#hwDue").value = ""; $("#hwForm").hidden = true;
+    hwSave(); toast("Homework added");
+  });
+  $("#hwChips").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) { hwFilter = b.dataset.k; renderHomework(); } });
+  $("#hwList").addEventListener("click", e => {
+    const act = e.target.closest("[data-act]"); if (!act) return;
+    const card = act.closest(".hw-card"), x = card && hws.find(h => h.id === card.dataset.id); if (!x) return;
+    const row = act.closest("[data-item]"), it = row && x.items.find(i => i.id === row.dataset.item);
+    if (act.dataset.act === "tick" && it) { it.done = !it.done; hwJust = it.id; }
+    else if (act.dataset.act === "tickText") { x.done = !x.done; hwJust = x.id; }
+    else if (act.dataset.act === "rm" && it) x.items = x.items.filter(i => i !== it);
+    else if (act.dataset.act === "del") { if (!confirm("Delete this homework?")) return; hws = hws.filter(h => h !== x); }
+    else return;
+    hwSave();
+  });
+  $("#hwList").addEventListener("submit", e => {
+    if (!e.target.classList.contains("hw-add")) return;
+    e.preventDefault();
+    const card = e.target.closest(".hw-card"), x = card && hws.find(h => h.id === card.dataset.id), v = $("input", e.target).value.trim();
+    if (!x || !v) return;
+    const it = { id: uid6(), text: v.slice(0, 160), done: false }; x.items.push(it); hwSave();
+  });
+
+  Object.assign(H, {
+    getHomework: () => hws,
+    applyHomework(list) { hws = (Array.isArray(list) ? list : []).filter(validHw).map(cleanHw); store.set("focus-homework", hws); renderHomework(); },
+    renderHomework
+  });
+  const hwSeenInit = () => $$("#mSeg .new").forEach(b => { const g = b.closest("[data-go]"); if (g && seen[g.dataset.go]) b.remove(); });
+  renderHomework(); hwPlace();
+
+  /* ============================================================
+     PHONE LAYOUT (screens up to 760px wide). Desktop is untouched:
+     on a phone the timer pieces are moved into cards, a bottom bar
+     with a "More" screen replaces the sidebar.
+     ============================================================ */
+  const mq = matchMedia("(max-width: 760px)");
+  const MORE = ["subjects", "papers", "homework", "countdown", "pulse", "preferences"];
+  const NEWT = ["subjects", "papers", "homework", "countdown", "pulse"];
+  const mTitles = {
+    timer: ["Study studio", "Morrow"], tasks: ["Stay on track", "Tasks"], progress: ["Your study record", "Progress"], ranking: ["Study together", "Rankings"],
+    subjects: ["Study toolkit", "Subjects"], papers: ["Study toolkit", "Paper progress"], homework: ["Study toolkit", "Homework"],
+    countdown: ["Study toolkit", "Countdown"], pulse: ["Study toolkit", "Pulse"], preferences: ["Study toolkit", "Settings"]
+  };
+  let lastMore = "subjects";
+  const placed = [];
+  function putIn(node, slot) {
+    if (!node || !slot || node.dataset.placed) return;
+    const ph = document.createComment("slot"); node.before(ph); node.dataset.placed = "1"; placed.push({ node, ph }); slot.appendChild(node);
+  }
+  function toMobile() {
+    const t = $("#mTimerCard"), s = $("#mSubjCard");
+    putIn($("#seg"), $(".slot-seg", t)); putIn($("#cdBadge"), $(".slot-ring", t)); putIn($("#ringWrap"), $(".slot-ring", t));
+    putIn($(".controls"), $(".slot-ctl", t)); putIn($("#cycle"), $(".slot-ctl", t)); putIn($("#subjects"), $(".slot-subj", s));
+  }
+  function toDesktop() { placed.splice(0).forEach(p => { p.ph.replaceWith(p.node); delete p.node.dataset.placed; }); }
+  function mHeader(name) {
+    const m = mTitles[name] || ["", ""];
+    $("#mEyebrow").textContent = m[0];
+    $("#pageTitle").textContent = mq.matches ? m[1] : (titles[name] || m[1]);
+  }
+  function syncMnav(name) {
+    if (MORE.includes(name)) lastMore = name;
+    $$("#mnav [data-go]").forEach(b => b.removeAttribute("aria-current"));
+    const b = $('#mnav [data-go="' + (MORE.includes(name) ? "more" : name) + '"]'); if (b) b.setAttribute("aria-current", "page");
+    $("#mnav .nd").hidden = !NEWT.some(n => !seen[n]);
+  }
+  function mobileSync(name) {
+    mHeader(name); syncMnav(name);
+    const a = $('#mSeg [data-go="' + name + '"]'); if (a && a.scrollIntoView) a.scrollIntoView({ inline: "center", block: "nearest" });
+  }
+  function applyLayout() {
+    if (mq.matches) toMobile(); else toDesktop();
+    mHeader(currentTab); syncMnav(currentTab);
+    requestAnimationFrame(() => { place(segIndicator, $('#seg [aria-pressed="true"]'), false); place(navIndicator, $('.tab[aria-selected="true"]'), false); });
+  }
+  $("#mnav").addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go === "more" ? lastMore : b.dataset.go); });
+  $("#mSeg").addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
+  $("#mManage").addEventListener("click", () => showTab("subjects"));
+  mq.addEventListener("change", applyLayout);
+
+  // small live pieces of the Focus screen
+  function mDate() {
+    const d = new Date();
+    $("#mDate").textContent = d.toLocaleDateString("en-GB", { weekday: "long" }).toUpperCase() + " " + d.getDate() + " " + d.toLocaleDateString("en-GB", { month: "short" }).toUpperCase();
+  }
+  function mTaskLine() {
+    const open = tasks.filter(t => !t.done), el = $("#mTaskTx");
+    if (el) el.textContent = open.length ? open[0].text + (open.length > 1 ? "  +" + (open.length - 1) + " more" : "") : "No tasks in your queue yet.";
+  }
+  const hm = s => (s >= 3600 ? Math.floor(s / 3600) + "h " : "") + Math.floor(s % 3600 / 60) + "m";
+  H.setTarget = (sec, goalSec, signed) => {
+    const pc = Math.min(100, Math.round(sec / Math.max(1, goalSec) * 100));
+    $("#mTgPct").textContent = pc + "%"; $("#mTgBar").style.width = pc + "%";
+    $("#mTgTx").textContent = hm(sec) + " of " + hm(goalSec) + " · " + (signed ? "Synced to your account" : "Saved on this device");
+  };
+  mDate(); setInterval(mDate, 60000); mTaskLine(); H.setTarget(0, 4 * 3600, false); hwSeenInit();
+  $$("#mSeg .new").forEach(b => { const g = b.closest("[data-go]"); if (g && seen[g.dataset.go]) b.remove(); });
+  Object.assign(H, { mobileSync, mTaskLine, applyLayout });
+  applyLayout();
+
   /* Bridge for the Firebase layer in this same file */
   Object.assign(H, {
     $, $$, place, burst, timer, showTab, activeSubject,
@@ -1242,6 +1424,7 @@
   const ADMIN = "gethminahalangoda@gmail.com";
   const BADGE = '<svg class="vb" viewBox="0 0 24 24" role="img" aria-label="Verified"><path fill="#3b9bf5" d="M12 1l3 2.2 3.7-.2 1.2 3.5 3 2.2-1.1 3.5 1.1 3.5-3 2.2-1.2 3.5-3.7-.2L12 23l-3-2.2-3.7.2-1.2-3.5-3-2.2L2.2 12 1.1 8.5l3-2.2 1.2-3.5L9 3z"/><path d="M7.5 12.3l3 3 6-6.3" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const CHK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const isVer = u => !!u && (u.email === ADMIN || u.verified === true);   // the super admin, plus anyone the admin verified
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const dstr = d => { d = d || new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   const ago = n => { const d = new Date(); d.setDate(d.getDate() - n); return dstr(d); };
@@ -1319,7 +1502,7 @@
 
   const newDoc = u => ({
     name: u.displayName || "Student", email: u.email, photoURL: u.photoURL || "", bio: "", dailyGoal: 4,
-    subjects: H.getSubjects(), tasks: H.getTasks(), prefs: JSON.parse(JSON.stringify(H.getPrefs())), papers: H.getPapers(), countdowns: H.getCountdowns(),
+    subjects: H.getSubjects(), tasks: H.getTasks(), prefs: JSON.parse(JSON.stringify(H.getPrefs())), papers: H.getPapers(), countdowns: H.getCountdowns(), homework: H.getHomework(),
     days: {}, totalPoints: 0, totalSec: 0, sessionCount: 0, studying: false, studyingAt: 0,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -1327,7 +1510,7 @@
   if (auth) auth.onAuthStateChanged(async u => {
     if (u) hideWelcome();
     else if (!flag.get()) { flag.set(); wel.hidden = false; $("#wSignIn").focus(); }   // new visitor, signed out
-    user = u; if (unsub) unsub(); unsub = null; me = null; memo = {}; dirty = false; stopSparks(); stopPulse();
+    user = u; if (unsub) unsub(); unsub = null; me = null; memo = {}; dirty = false; stopSparks(); stopPulse(); adm.list = null;
     ref = u ? db.collection("users").doc(u.uid) : null;
     if (u) {
       hadUser = true;
@@ -1356,6 +1539,7 @@
   H.onTasks = t => { if (user) upd({ tasks: t }); };
   H.onPapers = p => { if (user) upd({ papers: p }); };
   H.onCountdowns = c => { if (user) upd({ countdowns: c }); };
+  H.onHomework = x => { if (user) upd({ homework: x }); };
   H.onPrefs = p => {
     if (user) upd({ prefs: JSON.parse(JSON.stringify(p)) });
     if (!!p.ghost !== lastGhost) { lastGhost = !!p.ghost; presenceSync(); if (!$("#panel-pulse").hidden) renderPulse(); }
@@ -1382,7 +1566,7 @@
   function render() {
     const b = $("#authBtn");
     if (user) { b.innerHTML = '<span class="avatar">' + av(me || { name: user.displayName, photoURL: user.photoURL }) + '</span><span class="nm">' + esc((me && me.name) || "Account") + "</span>"; b.classList.add("signed"); b.setAttribute("aria-label", "Open preferences"); }
-    else { b.textContent = "Sign in with Google"; b.classList.remove("signed"); b.removeAttribute("aria-label"); }
+    else { b.innerHTML = '<span class="d-only">Sign in with Google</span><span class="m-only">Sign in</span>'; b.classList.remove("signed"); b.removeAttribute("aria-label"); }
     if (me) {
       const s = JSON.stringify(me.subjects), t = JSON.stringify(me.tasks), p = JSON.stringify(me.prefs), pp = JSON.stringify(me.papers);
       if (memo.s !== s) { memo.s = s; H.applySubjects(me.subjects); }
@@ -1391,8 +1575,12 @@
       if (memo.pp !== pp) { memo.pp = pp; if (me.papers !== undefined) H.applyPapers(me.papers); }
       const cc = JSON.stringify(me.countdowns);
       if (memo.cc !== cc) { memo.cc = cc; if (me.countdowns !== undefined) H.applyCountdowns(me.countdowns); else H.onCountdowns(H.getCountdowns()); }
+      const hh = JSON.stringify(me.homework);
+      if (memo.hh !== hh) { memo.hh = hh; if (me.homework !== undefined) H.applyHomework(me.homework); else H.onHomework(H.getHomework()); }
     }
     renderStreak();
+    const D0 = daysOf(me), t0 = dstr(); H.setTarget((D0[t0] && D0[t0].total) || 0, ((me && me.dailyGoal) || 4) * 3600, !!user);
+    $("#rkJoin").hidden = $("#rkJoinBtn").hidden = !!user; adminSync();
     if (!dirty) fillProfile();
     if (!$("#panel-progress").hidden) drawProg(false);
     if (!$("#panel-ranking").hidden) startRank();
@@ -1414,12 +1602,14 @@
   function renderStreak() {
     const s = streakInfo(), txt = s.cur + " day streak";
     $("#chipTxt").textContent = txt; $("#wkStreak").textContent = txt; $("#wkBest").textContent = "Best: " + s.best + " days";
+    $("#mStreak").textContent = txt; $("#mStrTitle").textContent = txt; $("#mBest").textContent = "Best: " + s.best + " days";
     const now = new Date(), mon = new Date(now); mon.setDate(now.getDate() - (now.getDay() + 6) % 7);
     const legacy = (me && me.studyDays) || [];
-    $("#days").innerHTML = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((l, i) => {
+    const dh = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((l, i) => {
       const d = new Date(mon); d.setDate(mon.getDate() + i); const x = dstr(d);
       return '<div class="day' + (s.ok(x) || legacy.includes(x) ? " done" : "") + (x === dstr() ? " today" : "") + '" style="--i:' + i + '"><span class="dot">' + CHK + "</span>" + l + "</div>";
     }).join("");
+    $("#days").innerHTML = dh; $("#mDays").innerHTML = dh;
   }
 
   /* ---------- Progress (reads the live "days" map) ---------- */
@@ -1438,6 +1628,8 @@
     const pc = Math.min(100, Math.round(today / target * 100)), bar = $("#goalBar");
     $("#goalTx").textContent = fmt(today) + " of " + fmt(target); $("#goalPct").textContent = pc + "%";
     if (animate) { bar.style.width = "0%"; requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = pc + "%"; })); } else bar.style.width = pc + "%";
+    const tot = [...Array(range)].map((_, i) => Math.round((((D[ago(range - 1 - i)] || {}).total) || 0) / 60));
+    $("#mPeak").textContent = Math.max(0, ...tot); $("#mEmpty").hidden = tot.some(v => v > 0);
     if (typeof Chart === "undefined") return;
     const css = getComputedStyle(document.documentElement), ink = css.getPropertyValue("--ink").trim(), mu = css.getPropertyValue("--muted").trim();
     const dl = [...Array(range)].map((_, i) => ago(range - 1 - i));
@@ -1467,7 +1659,8 @@
   $("#rankList").addEventListener("pointermove", e => { const r = e.target.closest(".spot"); if (!r) return; const b = r.getBoundingClientRect(); r.style.setProperty("--mx", e.clientX - b.left + "px"); r.style.setProperty("--my", e.clientY - b.top + "px"); });
   function renderRank() {
     const list = $("#rankList"), empty = $("#rankEmpty"), chips = $("#rkChips");
-    if (!user) { list.innerHTML = ""; chips.innerHTML = ""; $("#rkNote").textContent = ""; empty.hidden = false; empty.textContent = "Sign in with Google to see the rankings."; return; }
+    if (!user) { list.innerHTML = ""; chips.innerHTML = ""; $("#rkNote").textContent = ""; empty.hidden = false; empty.classList.add("signin"); empty.textContent = "Sign in with Google to see the rankings."; return; }
+    empty.classList.remove("signin");
     if (!rk.list) return;
     const t = dstr(), live = u => u.studying && Date.now() - (u.studyingAt || 0) < 150000;
     const subs = [...new Map(rk.list.flatMap(u => u.subjects || []).map(s => [key(s.name), s.name])).values()].slice(0, 10);
@@ -1480,7 +1673,7 @@
     const rows = rk.list.map(u => Object.assign({}, u, { v: val(u) })).filter(u => u.v > 0 || (rk.cat !== "alltime" && live(u))).sort((a, b) => b.v - a.v).slice(0, 50);
     const max = rows.length ? Math.max(rows[0].v, 1) : 1;
     empty.hidden = rows.length > 0; empty.textContent = "Nobody here yet. Save a session to take the first spot.";
-    list.innerHTML = rows.map((u, i) => '<li class="row spot' + (u.id === user.uid ? " me" : "") + '" data-fx="spot"><span class="pos">' + (i + 1) + '</span><span class="avatar">' + av(u) + '</span><span class="name"><span>' + esc(u.name) + "</span>" + (u.email === ADMIN ? BADGE : "") + (live(u) ? '<span class="live">Studying</span>' : "") + '</span><span class="meter"><i style="--w:' + Math.round(u.v / max * 100) + '%"></i></span><span class="mins">' + (rk.cat === "alltime" ? u.v.toFixed(1) + " pts" : fmt(u.v)) + "</span></li>").join("");
+    list.innerHTML = rows.map((u, i) => '<li class="row spot' + (u.id === user.uid ? " me" : "") + '" data-fx="spot"><span class="pos">' + (i + 1) + '</span><span class="avatar">' + av(u) + '</span><span class="name"><span>' + esc(u.name) + "</span>" + (isVer(u) ? BADGE : "") + (live(u) ? '<span class="live">Studying</span>' : "") + '</span><span class="meter"><i style="--w:' + Math.round(u.v / max * 100) + '%"></i></span><span class="mins">' + (rk.cat === "alltime" ? u.v.toFixed(1) + " pts" : fmt(u.v)) + "</span></li>").join("");
   }
 
   /* ---------- Profile (Preferences tab) ---------- */
@@ -1545,7 +1738,7 @@
     if (!user || !db) return;
     const p = force === false ? null : presenceNow();
     const photo = me && me.photoURL && me.photoURL.length < 20000 ? me.photoURL : "";
-    const base = { uid: user.uid, name: (me && me.name) || user.displayName || "Student", photoURL: photo, email: user.email };
+    const base = { uid: user.uid, name: (me && me.name) || user.displayName || "Student", photoURL: photo, email: user.email, verified: !!(me && me.verified) };
     db.collection("presence").doc(user.uid).set(p ? Object.assign(base, p) : Object.assign(base, { status: "idle", endTime: 0, updatedAt: Date.now() })).catch(() => {});
     clearInterval(hbTimer); hbTimer = p && p.mode === "stopwatch" ? setInterval(() => presenceSync(), 15 * 60000) : null;
   }
@@ -1575,7 +1768,7 @@
     grid.innerHTML = act.map((p, i) => {
       const mine = p.uid === user.uid;
       return '<article class="card pcard" style="--c:' + esc(p.color || "#b9aee8") + ";animation-delay:" + i * 50 + 'ms" data-start="' + p.startTime + '" data-end="' + p.endTime + '" data-mode="' + esc(p.mode) + '">' +
-        '<div class="pc-top"><span class="avatar">' + av(p) + '</span><div class="pc-who"><div class="pc-name"><span>' + esc(p.name) + "</span>" + (p.email === ADMIN ? BADGE : "") + '</div><span class="pill"><i></i>' + esc(p.subject) + "</span></div>" +
+        '<div class="pc-top"><span class="avatar">' + av(p) + '</span><div class="pc-who"><div class="pc-name"><span>' + esc(p.name) + "</span>" + (isVer(p) ? BADGE : "") + '</div><span class="pill"><i></i>' + esc(p.subject) + "</span></div>" +
         (mine ? '<span class="pc-you">You</span>' : '<button type="button" class="spark' + (sent.has(p.uid) ? " sent" : "") + '" data-uid="' + esc(p.uid) + '" data-name="' + esc(p.name) + '" aria-label="Send ' + esc(p.name) + ' a focus spark">' + BOLT + "</button>") + "</div>" +
         '<div class="pc-meta"><span class="pc-time"></span><span>' + (p.mode === "pomodoro" ? "Pomodoro" : "Stopwatch") + '</span></div><div class="pc-bar"><i></i></div></article>';
     }).join("");
@@ -1622,11 +1815,43 @@
   }
   setInterval(() => { if (user && sparkDay !== dstr()) listenSparks(); }, 60000);
 
+  /* ---------- Admin: give or remove the verified badge ---------- */
+  const isAdmin = () => !!user && user.email === ADMIN;
+  const adm = { list: null, busy: false, q: "" };
+  function adminSync() { const c = $("#adminCard"); if (c) c.hidden = !isAdmin(); }
+  async function adminLoad(force) {
+    if (!isAdmin() || adm.busy || (adm.list && !force)) return;
+    adm.busy = true;
+    try { adm.list = (await db.collection("users").limit(300).get()).docs.map(d => Object.assign({ id: d.id }, d.data())); }
+    catch (e) { H.toast(errMsg("Could not load users", e)); }
+    adm.busy = false; renderAdmin();
+  }
+  function renderAdmin() {
+    const ul = $("#admList"); if (!ul) return;
+    if (!adm.list) { ul.innerHTML = '<li class="empty">Loading users...</li>'; return; }
+    const q = adm.q.trim().toLowerCase();
+    const rows = adm.list.filter(u => !q || (u.name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q))
+      .sort((x, y) => (isVer(y) - isVer(x)) || (x.name || "").localeCompare(y.name || "")).slice(0, 60);
+    ul.innerHTML = rows.length ? rows.map(u => '<li class="adm-row"><span class="avatar">' + av(u) + '</span><div class="adm-who"><b>' + esc(u.name || "Unnamed") + (isVer(u) ? BADGE : "") + "</b><small>" + esc(u.email || "") + "</small></div>" +
+      (u.email === ADMIN ? '<span class="pc-you">Super admin</span>' : '<button type="button" class="btn ghost small" data-uid="' + esc(u.id) + '">' + (u.verified ? "Remove badge" : "Verify") + "</button>") + "</li>").join("") : '<li class="empty">No users match.</li>';
+  }
+  $("#admSearch").addEventListener("input", e => { adm.q = e.target.value; renderAdmin(); });
+  $("#admRefresh").addEventListener("click", () => adminLoad(true));
+  $("#admList").addEventListener("click", async e => {
+    const b = e.target.closest("[data-uid]"); if (!b || !isAdmin()) return;
+    const u = adm.list && adm.list.find(x => x.id === b.dataset.uid); if (!u) return;
+    const next = !u.verified; b.disabled = true;
+    try { await db.collection("users").doc(u.id).update({ verified: next }); u.verified = next; H.toast((u.name || "User") + (next ? " is now verified" : " is no longer verified")); }
+    catch (err) { H.toast(errMsg("Could not change the badge", err)); }
+    renderAdmin();
+  });
+  $("#rkJoinBtn").addEventListener("click", () => login());
+
   H.onTab = name => {
     if (name === "pulse") startPulse(); else stopPulse();
     if (name === "progress") { H.place($("#rngInd"), $('#rngSeg [aria-pressed="true"]'), false); drawProg(true); }
     else if (name === "ranking") startRank();
-    else if (name === "preferences" && !dirty) fillProfile();
+    else if (name === "preferences") { if (!dirty) fillProfile(); adminSync(); adminLoad(false); }
   };
   render();
 })();
