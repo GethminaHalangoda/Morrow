@@ -675,6 +675,469 @@ html[data-theme="dark"] .hw-due.soon{background:#3b3320;color:#e8cf8a}html[data-
 </style>
 </head>
 <body>
+
+<!-- =========================================================================
+     MORROW SPLASH SCREEN SNIPPET
+     How to install:
+     1. Paste this ENTIRE block right after your opening <body> tag in index.html
+        (above your existing website content and above your bottom <script> tags).
+     2. All CSS classes and JS variables are prefixed with "morrow-" so they will
+        not conflict with your existing site's styles or scripts.
+     ========================================================================= -->
+
+<div id="morrow-splash" aria-label="Loading Morrow">
+  <!-- Subtle Starfield Background -->
+  <canvas id="morrow-stars"></canvas>
+
+  <!-- Centerpiece Content -->
+  <div class="morrow-center">
+    <!-- Brand Group (Top/Center on Mobile, Centered on Desktop) -->
+    <div class="morrow-brand-group">
+      <!-- App Logo -->
+      <div class="morrow-logo-wrap morrow-reveal" style="--delay: 0.1s;">
+        <img
+          src="App logo(web).jpg"
+          alt="Morrow Logo"
+          class="morrow-logo"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+        />
+        <!-- Clean fallback badge if image path isn't resolved yet -->
+        <div class="morrow-logo-fallback" style="display: none;">M</div>
+      </div>
+
+      <!-- Brand Name & Calm Focus Tagline -->
+      <h1 class="morrow-title morrow-reveal" style="--delay: 0.25s;">Morrow</h1>
+      <p class="morrow-subtitle morrow-reveal" style="--delay: 0.4s;">
+        Quiet your mind. Enter deep focus.
+      </p>
+    </div>
+
+    <!-- Action Stage (Stacked Vertically With Natural Spacing) -->
+    <div class="morrow-action-stage">
+      <!-- 5-Second Loading Bar -->
+      <div id="morrow-loader" class="morrow-loader morrow-reveal" style="--delay: 0.55s;">
+        <div class="morrow-loader-header">
+          <span id="morrow-status-text">PREPARING FOCUS SPACE</span>
+          <span id="morrow-percent" class="morrow-percent">0%</span>
+        </div>
+        <div class="morrow-track">
+          <div id="morrow-bar" class="morrow-bar"></div>
+        </div>
+      </div>
+
+      <!-- Soft-Glow Enter Button (Hidden until loading completes, then glides in smoothly) -->
+      <div class="morrow-btn-slot">
+        <button id="morrow-enter-btn" type="button" class="morrow-btn">
+          Begin Session
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Scoped exclusively to #morrow-splash to protect your existing styles */
+  #morrow-splash,
+  #morrow-splash * {
+    box-sizing: border-box;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  #morrow-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 42%, #111622 0%, #07090e 65%, #030407 100%);
+    color: #f8fafc;
+    overflow: hidden;
+    transition: opacity 0.85s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.85s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  #morrow-splash.morrow-exit {
+    opacity: 0;
+    transform: scale(1.03);
+    pointer-events: none;
+  }
+
+  #morrow-stars {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  /* Desktop Centered Layout */
+  .morrow-center {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    max-width: 440px;
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .morrow-brand-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Logo Container with Subtle Bulb-Spectrum Aura */
+  .morrow-logo-wrap {
+    width: 96px;
+    height: 96px;
+    border-radius: 26px;
+    padding: 3px;
+    margin-bottom: 1.5rem;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.35), rgba(59, 130, 246, 0.3), rgba(245, 158, 11, 0.35));
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.65), 0 0 28px rgba(59, 130, 246, 0.14);
+  }
+
+  .morrow-logo,
+  .morrow-logo-fallback {
+    width: 100%;
+    height: 100%;
+    border-radius: 23px;
+    object-fit: cover;
+    display: block;
+    background: #141923;
+  }
+
+  .morrow-logo-fallback {
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+
+  /* Typography */
+  .morrow-title {
+    margin: 0 0 0.5rem;
+    font-size: 2.35rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: #f8fafc;
+  }
+
+  .morrow-subtitle {
+    margin: 0 0 2.75rem;
+    font-size: 1rem;
+    font-weight: 400;
+    color: #94a3b8;
+    letter-spacing: 0.01em;
+    line-height: 1.5;
+  }
+
+  /* Stacked Action Stage: Reserves space for both the bar and the button below it */
+  .morrow-action-stage {
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2.25rem;
+  }
+
+  /* Larger 5-Second Loading Bar with Logo Bulb Palette */
+  .morrow-loader {
+    width: 100%;
+  }
+
+  .morrow-loader-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: #64748b;
+  }
+
+  .morrow-percent {
+    font-variant-numeric: tabular-nums;
+    color: #cbd5e1;
+  }
+
+  .morrow-track {
+    width: 100%;
+    height: 7px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  }
+
+  .morrow-bar {
+    width: 0%;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #10b981 0%, #3b82f6 38%, #f59e0b 72%, #f97316 100%);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+    transition: width 0.08s linear;
+  }
+
+  /* Reserved Slot Beneath the Loading Bar */
+  .morrow-btn-slot {
+    width: 100%;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Calm, Non-Flashy Glowing Button (Completely invisible until .morrow-ready) */
+  .morrow-btn {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(14px) scale(0.97);
+    pointer-events: none;
+    padding: 0.88rem 2.4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 232, 240, 0.26);
+    background: rgba(248, 250, 252, 0.08);
+    color: #f8fafc;
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 22px rgba(203, 213, 225, 0.14),
+                inset 0 0 12px rgba(255, 255, 255, 0.04);
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+                visibility 0.7s ease,
+                box-shadow 0.35s ease,
+                background 0.35s ease,
+                border-color 0.35s ease;
+  }
+
+  .morrow-btn.morrow-ready {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    animation: morrowCalmGlow 3.2s ease-in-out 0.7s infinite;
+  }
+
+  .morrow-btn.morrow-ready:hover {
+    background: rgba(248, 250, 252, 0.15);
+    border-color: rgba(248, 250, 252, 0.48);
+    box-shadow: 0 0 32px rgba(226, 232, 240, 0.28),
+                inset 0 0 14px rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .morrow-btn.morrow-ready:active {
+    transform: scale(0.98);
+  }
+
+  /* Staggered Entrance Reveal */
+  .morrow-reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    animation: morrowFadeUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) var(--delay, 0s) forwards;
+  }
+
+  @keyframes morrowFadeUp {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes morrowCalmGlow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(203, 213, 225, 0.14),
+                  inset 0 0 10px rgba(255, 255, 255, 0.03);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(203, 213, 225, 0.25),
+                  inset 0 0 14px rgba(255, 255, 255, 0.08);
+    }
+  }
+
+  /* =========================================================================
+     DEDICATED MOBILE LAYOUT (Phones & Narrow Portrait Screens)
+     Splits the viewport into a serene upper hero and a thumb-zone bottom dock
+     ========================================================================= */
+  @media (max-width: 640px) {
+    .morrow-center {
+      height: 100dvh;
+      max-width: 100%;
+      justify-content: space-between;
+      padding: 18vh 1.75rem 3.75rem;
+    }
+
+    .morrow-brand-group {
+      align-items: center;
+    }
+
+    .morrow-logo-wrap {
+      width: 108px;
+      height: 108px;
+      border-radius: 28px;
+      margin-bottom: 1.75rem;
+    }
+
+    .morrow-logo,
+    .morrow-logo-fallback {
+      border-radius: 25px;
+    }
+
+    .morrow-title {
+      font-size: 2.35rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .morrow-subtitle {
+      margin-bottom: 0;
+      font-size: 0.95rem;
+      max-width: 260px;
+      line-height: 1.5;
+    }
+
+    .morrow-action-stage {
+      max-width: 100%;
+      gap: 1.65rem;
+    }
+
+    .morrow-track {
+      height: 8px;
+    }
+
+    .morrow-btn-slot {
+      min-height: 56px;
+    }
+
+    .morrow-btn {
+      width: 100%;
+      padding: 1rem 1.5rem;
+      font-size: 1rem;
+    }
+  }
+</style>
+
+<script>
+  // Wrapped in an IIFE so no variables leak into your existing website scripts
+  (function () {
+    const splash = document.getElementById('morrow-splash');
+    const canvas = document.getElementById('morrow-stars');
+    const bar = document.getElementById('morrow-bar');
+    const percentText = document.getElementById('morrow-percent');
+    const statusText = document.getElementById('morrow-status-text');
+    const enterBtn = document.getElementById('morrow-enter-btn');
+
+    if (!splash || !canvas) return;
+
+    // Lock background scrolling while splash is active
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    // --- 1. Gentle Twinkling Starfield ---
+    const ctx = canvas.getContext('2d');
+    let stars = [];
+    let animFrameId;
+
+    function setupStars() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const count = Math.min(Math.floor((canvas.width * canvas.height) / 9500), 130);
+      stars = Array.from({ length: count }, function () {
+        return {
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          r: Math.random() * 1.4 + 0.3,
+          baseAlpha: Math.random() * 0.55 + 0.15,
+          phase: Math.random() * Math.PI * 2,
+          speed: Math.random() * 0.015 + 0.005,
+          driftY: -(Math.random() * 0.12 + 0.02)
+        };
+      });
+    }
+
+    function renderStars() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < stars.length; i++) {
+        const s = stars[i];
+        s.phase += s.speed;
+        s.y += s.driftY;
+        if (s.y < 0) s.y = canvas.height;
+
+        const alpha = s.baseAlpha + Math.sin(s.phase) * 0.18;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(226, 232, 240, ' + Math.max(0.05, alpha) + ')';
+        ctx.fill();
+      }
+      animFrameId = requestAnimationFrame(renderStars);
+    }
+
+    setupStars();
+    renderStars();
+    window.addEventListener('resize', setupStars);
+
+    // --- 2. Smooth 5-Second Loading Bar ---
+    const DURATION_MS = 5000;
+    const startTime = performance.now();
+
+    function updateProgress(now) {
+      const elapsed = now - startTime;
+      const ratio = Math.min(elapsed / DURATION_MS, 1);
+      // Gentle ease-in-out curve for a calm focus feel
+      const eased = ratio < 0.5
+        ? 2 * ratio * ratio
+        : 1 - Math.pow(-2 * ratio + 2, 2) / 2;
+
+      const pct = Math.round(eased * 100);
+      if (bar) bar.style.width = (eased * 100) + '%';
+      if (percentText) percentText.textContent = pct + '%';
+
+      if (ratio < 1) {
+        requestAnimationFrame(updateProgress);
+      } else {
+        if (statusText) statusText.textContent = 'FOCUS SPACE READY';
+        if (enterBtn) {
+          setTimeout(function () {
+            enterBtn.classList.add('morrow-ready');
+          }, 180);
+        }
+      }
+    }
+
+    requestAnimationFrame(updateProgress);
+
+    // --- 3. Dismiss Splash & Clean Up ---
+    let isDismissed = false;
+
+    function closeSplash() {
+      if (isDismissed) return;
+      isDismissed = true;
+      splash.classList.add('morrow-exit');
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('resize', setupStars);
+
+      setTimeout(function () {
+        cancelAnimationFrame(animFrameId);
+        splash.remove();
+      }, 900);
+    }
+
+    if (enterBtn) {
+      enterBtn.addEventListener('click', closeSplash);
+    }
+  })();
+</script>
+
 <div class="app">
 
   <!-- ===================== SIDEBAR ===================== -->
