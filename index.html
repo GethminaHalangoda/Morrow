@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Morrow — Connection Lost</title>
 
-  <!-- Inline SVG Data-URI Favicon matching Morrow's burnt-orange & obsidian aesthetic -->
-  <link rel="icon" type="image/svg+xml" href="app logo(web).jpg" />
+  <!-- Favicon using exact filename "App logo(web).jpg" with fallback -->
+  <link id="site-favicon" rel="icon" type="image/jpeg" href="App logo(web).jpg" />
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -223,17 +223,17 @@
 
   <!-- Top Navigation Bar (Logo Left, Clean Minimal Header) -->
   <header class="relative z-20 w-full max-w-[1380px] mx-auto px-6 sm:px-12 pt-6 sm:pt-7 flex items-center justify-between">
-    <!-- Left Brand Logo: Uses app logo(web).jpg with seamless fallback if file is missing -->
+    <!-- Left Brand Logo: Uses "App logo(web).jpg" with seamless fallback if file is missing -->
     <a href="#reload" onclick="handleReloadSite(event)" class="group flex items-center gap-3 focus:outline-none rounded-lg" aria-label="Morrow">
       <div class="relative flex items-center">
         <img
           id="brand-logo-img"
-          src="app logo(web).jpg"
+          src="App logo(web).jpg"
           alt="Morrow Logo"
           class="h-9 sm:h-10 w-auto object-contain rounded-lg transition-transform duration-300 group-hover:scale-105"
-          onerror="this.style.display='none'; document.getElementById('brand-logo-fallback').classList.remove('hidden');"
+          onerror="handleLogoFallback(this);"
         />
-        <!-- Fallback emblem matching the striped crimson-orange aesthetic if app logo(web).jpg is not found -->
+        <!-- Fallback emblem matching the striped crimson-orange aesthetic if App logo(web).jpg is not found -->
         <div id="brand-logo-fallback" class="hidden flex items-center gap-2.5">
           <svg class="w-9 h-9 text-morrow-accent transition-transform duration-300 group-hover:scale-105" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="40" height="40" rx="10" fill="#140504" stroke="#C83214" stroke-opacity="0.55" stroke-width="1.2"/>
@@ -454,6 +454,19 @@
       setTimeout(() => {
         window.location.reload();
       }, 650);
+    }
+
+    // Fallback handler if "App logo(web).jpg" is unavailable in the current environment
+    function handleLogoFallback(imgEl) {
+      imgEl.style.display = 'none';
+      const fallback = document.getElementById('brand-logo-fallback');
+      if (fallback) fallback.classList.remove('hidden');
+
+      const favicon = document.getElementById('site-favicon');
+      if (favicon) {
+        favicon.type = 'image/svg+xml';
+        favicon.href = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23e04422'/%3E%3Cstop offset='100%25' stop-color='%23991f0b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%23070303'/%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='none' stroke='%23c83214' stroke-opacity='0.45' stroke-width='2'/%3E%3Cpath d='M16 45V19h7l9 13.5L41 19h7v26h-6.5V29.5L32 43l-9.5-13.5V45H16z' fill='url(%23g)'/%3E%3C/svg%3E";
+      }
     }
 
     // Initialize reels and run periodic subtle GIF-like replay loop
